@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Build a disposable Ventoy USB file and boot it with Secure Boot disabled."""
 import argparse
+import hashlib
 import json
+import lzma
 from pathlib import Path
 import subprocess
 import tempfile
@@ -33,6 +35,16 @@ def ventoy(iso, arch, report):
         inputs.update({"ventoy_version": version, "ventoy_sha256": sha(archive)})
         subprocess.run(["bsdtar", "-xf", str(archive), "-C", str(temp)], check=True)
         tool = next(temp.glob("ventoy-*/Ventoy2Disk.sh"))
+        # dd count counts reads, including short pipe reads. A fast decompressor
+        # and a different host scheduler can otherwise truncate the EFI image.
+        worker = tool.parent / "tool/VentoyWorker.sh"
+        worker_text = worker.read_text()
+        original_dd = "| dd status=none conv=fsync"
+        full_dd = "| dd iflag=fullblock status=none conv=fsync"
+        if original_dd not in worker_text and full_dd not in worker_text:
+            raise RuntimeError("Ventoy installer write commands changed; review the fixture writer")
+        worker.write_text(worker_text.replace(original_dd, full_dd))
+        inputs["installer_pipe_fullblock"] = True
         disk = temp / "ventoy.img"
         with disk.open("wb") as stream:
             stream.truncate(((iso.stat().st_size // (1024 ** 3)) + 3) * 1024 ** 3)
@@ -59,6 +71,15 @@ def ventoy(iso, arch, report):
                         installer.wait()
             subprocess.run(["partprobe", loop], check=True)
             subprocess.run(["udevadm", "settle"], check=True)
+            expected_efi = lzma.decompress((tool.parent / "ventoy/ventoy.disk.img.xz").read_bytes())
+            subprocess.run(["blockdev", "--flushbufs", loop + "p2"], check=True)
+            with open(loop + "p2", "rb") as stream:
+                written_efi = stream.read(len(expected_efi))
+            inputs["efi_expected_sha256"] = hashlib.sha256(expected_efi).hexdigest()
+            inputs["efi_partition_sha256"] = hashlib.sha256(written_efi).hexdigest()
+            report.with_name(report.stem + "-inputs.json").write_text(json.dumps(inputs, indent=2) + "\n")
+            if written_efi != expected_efi:
+                raise RuntimeError("Ventoy EFI partition differs from the official uncompressed image")
             subprocess.run(["mount", loop + "p1", str(mount)], check=True)
             mounted = True
             relative_iso = Path("ISO images") / "系统" / iso.name

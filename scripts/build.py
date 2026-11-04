@@ -92,7 +92,7 @@ buildmodes=('iso')
 bootmodes=({modes})
 pacman_conf="pacman.conf"
 airootfs_image_type="squashfs"
-airootfs_image_tool_options=('-comp' 'xz' '-b' '1M' '-Xdict-size' '1M')
+airootfs_image_tool_options=('-comp' 'zstd' '-b' '1M' '-Xcompression-level' '15')
 file_permissions=(['/root']='0:0:700' ['/etc/sudoers.d/lynux-live']='0:0:440'
  ['/root/customize_airootfs.sh']='0:0:755' ['/usr/local/lib/lynux/boot-report']='0:0:755'
  ['/usr/local/lib/lynux/test-mode']='0:0:755' ['/usr/local/lib/lynux/pacman-download']='0:0:755'

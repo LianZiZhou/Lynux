@@ -6,6 +6,13 @@ on:
         description: Source weekly build run ID with image-x86_64 and image-x86_64-reports artifacts
         type: string
         required: true
+      checks:
+        description: Re-run all boot checks or only the Ventoy case
+        type: choice
+        default: all
+        options:
+          - all
+          - ventoy
 permissions:
   contents: read
   actions: read
@@ -48,8 +55,9 @@ jobs:
       - name: Verify existing ISO without rebuilding
         env:
           CONTAINER: ${{ steps.builder.outputs.container }}
+          CHECKS: ${{ inputs.checks }}
         run: |
-          bash scripts/ci-stage.sh reverify docker exec -e LYNUX_QEMU_DEBUG=1 "$CONTAINER" python /src/scripts/reverify-image.py /out
+          bash scripts/ci-stage.sh reverify docker exec -e LYNUX_QEMU_DEBUG=1 "$CONTAINER" python /src/scripts/reverify-image.py /out --checks "$CHECKS"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

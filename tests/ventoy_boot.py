@@ -63,7 +63,7 @@ def ventoy(iso, arch, report):
             shutil.copy2(iso, mount / relative_iso)
             (mount / "ventoy").mkdir()
             (mount / "ventoy/ventoy.json").write_text(json.dumps({"control": [
-                {"VTOY_MENU_TIMEOUT": "3"}, {"VTOY_SECONDARY_TIMEOUT": "3"}]}))
+                {"VTOY_MENU_TIMEOUT": "3"}, {"VTOY_SECONDARY_BOOT_MENU": "0"}]}))
             subprocess.run(["sync"], check=True)
         finally:
             if mounted:

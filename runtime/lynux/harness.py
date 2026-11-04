@@ -17,7 +17,7 @@ def binary(tool):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Lynux AI 运维入口")
+    parser = argparse.ArgumentParser(description="Lynux AI tool launcher")
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("list")
     sub.add_parser("doctor")
@@ -55,7 +55,7 @@ def main():
                     raise LynuxError("\n".join(failed))
         if failed:
             raise LynuxError("\n".join(failed))
-        print("五套 CLI 离线启动检查通过。")
+        print("All five CLIs start offline.")
         return
     if not os.environ.get("LYNUX_HARNESS_SCOPE"):
         # Each launch is a tracked system scope, including manually launched CLI wrappers.

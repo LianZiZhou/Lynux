@@ -13,7 +13,12 @@ RUN = Path("/run/lynux")
 
 
 class LynuxError(Exception):
-    pass
+    """A user-facing failure. `code` lets the desktop app show its own translated text."""
+
+    def __init__(self, message, code="error", **details):
+        super().__init__(message)
+        self.code = code
+        self.details = details
 
 
 def run(*args, capture=False, input=None, check=True, **kwargs):
@@ -28,7 +33,7 @@ def run(*args, capture=False, input=None, check=True, **kwargs):
 
 def root_required():
     if os.geteuid() != 0:
-        raise LynuxError("此操作需要 root 权限，请使用 sudo 运行。")
+        raise LynuxError("This needs root. Run it with sudo.", "not_root")
 
 
 def registry():
@@ -55,7 +60,8 @@ def session_lock(shared=False):
         try:
             fcntl.flock(lock, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
         except BlockingIOError as exc:
-            raise LynuxError("CLI 或存储操作仍在运行；请先退出所有运维终端与 CLI。") from exc
+            raise LynuxError("An AI CLI, root terminal or storage action is still running. Close it first.",
+                             "busy") from exc
         yield lock
 
 

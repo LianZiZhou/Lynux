@@ -35,6 +35,12 @@ wireplumber
 mesa
 qt6-wayland
 pyside6
+# Welcome window (Kirigami); listed explicitly so a Plasma dependency change can't drop them
+kirigami
+kirigami-addons
+qqc2-desktop-style
+plasma-integration
+kconfig
 # Offline input and fonts
 fcitx5
 fcitx5-configtool

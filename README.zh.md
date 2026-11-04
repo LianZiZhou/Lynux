@@ -22,6 +22,7 @@
 
 - 把 ISO 丢进 Ventoy 盘的任意目录，和其他发行版的 ISO 放一起就行。走 Ventoy 启动不需要开 Secure Boot。
 - 也可以直接把 ISO 写进 U 盘，其他 ISO 放在任何能访问到的盘上。
+- 登录后会打开 **Lynux 欢迎**窗口：启动 AI 工具、设置加密存储、校验和挂载 ISO，还能切换语言。换语言后窗口立即生效，桌面在注销后生效。
 - KDE 以普通用户 `live` 登录，运维终端和各个 CLI 会进入 root 会话。SSH 默认不开。
 - 默认重启就清空。想保留数据，在欢迎窗口里建一个 LUKS2 加密文件，CLI 登录状态和 `/workspace` 会存进去。
 - 直接写盘的 UEFI 镜像，导入我们的证书后可以开 Secure Boot 启动，见 [Secure Boot](docs/secure-boot.zh.md)。
@@ -65,6 +66,12 @@ LUKS2 测试在一次性的特权容器里跑，只动它自己创建的 loop �
 docker run --rm --privileged -e LYNUX_DISPOSABLE_TEST=1 \
   -v "$PWD:/src:ro" -w /src archlinux:base-devel bash -c \
   'bash scripts/setup-downloads.sh && pacman -S --noconfirm cryptsetup e2fsprogs util-linux && python tests/integration_state.py'
+```
+
+不构建镜像也能看欢迎窗口：在离屏模式下把每一页渲染成图片。需要 PySide6、Kirigami、Kirigami Addons 和 qqc2-desktop-style，比如在 Arch 容器里：
+
+```bash
+python tests/render_welcome.py --output work/welcome-preview --languages en_US zh_CN
 ```
 
 目录：构建配置在 `config/`，拷进镜像的文件在 `overlay/`，欢迎窗口和辅助程序在 `runtime/`。API Key、S3 凭据和签名私钥都不要放进这些目录。

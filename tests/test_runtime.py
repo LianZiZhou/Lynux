@@ -54,8 +54,9 @@ class RuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "state.luks"
             path.write_bytes(b"valuable data")
-            with self.assertRaisesRegex(common.LynuxError, "已存在"):
+            with self.assertRaises(common.LynuxError) as caught:
                 state.validate_container(path, creating=True)
+            self.assertEqual(caught.exception.code, "exists")
             self.assertEqual(path.read_bytes(), b"valuable data")
 
     @unittest.skipIf(os.name == "nt", "Unix symlinks")
@@ -86,7 +87,7 @@ class RuntimeTests(unittest.TestCase):
                     iso.main()
             self.assertEqual(json.loads(stdout.getvalue())["sha256"], checksum)
             with patch.object(sys, "argv", ["lynux-iso", "inspect", str(path), "--sha256", "0" * 64]):
-                with self.assertRaisesRegex(common.LynuxError, "不匹配"):
+                with self.assertRaisesRegex(common.LynuxError, "doesn't match"):
                     iso.main()
 
     def test_state_allowlist_excludes_system_and_caches(self):
@@ -106,7 +107,7 @@ class RuntimeTests(unittest.TestCase):
             mount = Path(folder)
             (mount / "format.json").write_text('{"schema":999}')
             with patch.object(state, "MOUNT", mount), patch.object(state, "run") as execute:
-                with self.assertRaisesRegex(common.LynuxError, "未知"):
+                with self.assertRaisesRegex(common.LynuxError, "Unknown storage format"):
                     state.mount_bindings()
                 execute.assert_not_called()
 
@@ -119,7 +120,7 @@ class RuntimeTests(unittest.TestCase):
                     state.check_capacity(path, 8 * state.GIB)
             table = json.dumps({"filesystems": [{"fstype": "ext4", "options": "ro"}]})
             with patch.object(state, "run", return_value=table):
-                with self.assertRaisesRegex(common.LynuxError, "只读"):
+                with self.assertRaisesRegex(common.LynuxError, "read-only"):
                     state.check_capacity(path, state.GIB)
 
     @unittest.skipIf(os.name == "nt", "Linux flock")

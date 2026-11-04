@@ -60,9 +60,14 @@ class BuildTests(unittest.TestCase):
             self.assertIn("archisolabel=" + meta["label"], (profile / "efiboot/loader/entries/lynux.conf").read_text())
             self.assertNotIn("lynux.test=1", meta["cmdline"])
             self.assertIn("pyside6", (profile / "packages.x86_64").read_text())
+            runtime = profile / "airootfs/usr/lib/lynux/lynux"
+            for name in ("Main.qml", "StoragePage.qml", "HoldersDialog.qml"):
+                self.assertTrue((runtime / "qml" / name).is_file(), name)
+            self.assertTrue((runtime / "i18n.py").is_file())
+            self.assertTrue((profile / "airootfs/usr/share/icons/hicolor/scalable/apps/lynux.svg").is_file())
 
     def test_both_architectures_keep_required_desktop_and_harness_runtime(self):
         for arch in ("x86_64", "aarch64"):
-            self.assertTrue({"plasma-desktop", "nodejs", "pyside6", "cryptsetup", "fcitx5-mozc"}
-                            .issubset(build.packages(arch)))
+            self.assertTrue({"plasma-desktop", "nodejs", "pyside6", "cryptsetup", "fcitx5-mozc", "kirigami",
+                             "kirigami-addons", "qqc2-desktop-style"}.issubset(build.packages(arch)))
         self.assertIn("archlinuxarm-keyring", build.packages("aarch64"))

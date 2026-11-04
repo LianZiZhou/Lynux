@@ -1,6 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=Lynux root 运维终端
+Name=Lynux Root Terminal
+Name[zh_CN]=Lynux root 终端
+Name[zh_TW]=Lynux root 終端機
+Name[zh_HK]=Lynux root 終端機
+Name[ja]=Lynux root ターミナル
 Exec=konsole --separate -e sudo lynux-harness run shell
 Icon=utilities-terminal
 Categories=System;TerminalEmulator;

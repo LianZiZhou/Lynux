@@ -36,6 +36,13 @@ if command -v rime_deployer >/dev/null; then
     runuser -u live -- rime_deployer --build /home/live/.local/share/fcitx5/rime /usr/share/rime-data /home/live/.local/share/fcitx5/rime/build
 fi
 chown -R live:live /home/live
+# Fail the build if the welcome window can't load: a missing Kirigami module or a QML error
+# would otherwise only show up as a blank desktop. Loads every page in every language.
+check_runtime=$(mktemp -d)
+chown live:live "$check_runtime"
+runuser -u live -- env HOME=/home/live XDG_RUNTIME_DIR="$check_runtime" QT_QPA_PLATFORM=offscreen \
+    QT_QUICK_BACKEND=software QML_DISABLE_DISK_CACHE=1 /usr/local/bin/lynux-welcome --check
+rm -rf "$check_runtime" /home/live/.cache
 cc -O2 -Wall -Wextra -Werror /usr/local/lib/lynux/ventoy-find.c -o /usr/bin/lynux-ventoy-find
 if [[ -f /usr/share/lynux/linux-aarch64.preset ]]; then
     # Preserve the kernel package's exact ALL_kver, overriding only live output names.

@@ -1,19 +1,77 @@
 <!doctype html>
-<html lang="zh-CN"><meta charset="utf-8"><title>Lynux 使用说明</title>
-<style>body{font:18px/1.8 sans-serif;max-width:900px;margin:60px auto;padding:0 24px;background:#101827;color:#e8eef6}h1{font-size:48px;color:#7dd3fc}h2{margin-top:36px}code,pre{background:#1e293b;padding:5px 9px;border-radius:6px}pre{padding:18px;overflow:auto}a{color:#7dd3fc}</style>
-<h1>Lynux</h1><p>选择工具，连接模型，开始运维。</p>
-<h2>先连接网络</h2><p>在 KDE 系统托盘连接 Wi-Fi 或有线网络，再从工作台启动 Codex、Claude Code、Kimi Code、DeepSeek Harness 或 OpenCode。模型账号由你配置，工具本身已预装。</p>
-<p>DeepSeek 入口启动官方 <code>dsh web</code>，在普通用户浏览器中使用本地界面；其余工具进入终端交互界面。</p>
-<h2>临时会话与加密工作区</h2><p>默认关机不保留会话。需要保存时，先在文件管理器挂载 Ventoy 数据分区或其他可写存储，再创建／解锁加密容器。密码在终端输入。解锁后 CLI 状态和 <code>/workspace</code> 保存在容器里；系统软件和桌面设置仍是临时的。</p>
-<pre>lynux-state status
-lynux-state create /实际挂载路径/Lynux/state.luks --size-gib 8
-lynux-state unlock /实际挂载路径/Lynux/state.luks
-lynux-state lock</pre>
-<p>先退出所有 CLI 和 root 运维终端，再锁定或切换存储。容器文件不是备份，换新 ISO 前可在锁定状态下复制容器备份。</p>
-<h2>使用其他发行版的 ISO</h2><p>ISO 无需放在固定目录。工作台支持选择文件、计算 SHA-256 和只读挂载。安装时由你与 AI 配合使用发行版原生工具；选择实际目标磁盘后再进行分区或写入。</p>
-<pre>lynux-iso inspect '/实际路径/发行版.iso'
-lynux-iso mount '/实际路径/发行版.iso'
-lynux-iso unmount 挂载ID</pre>
-<h2>输入法与权限</h2><p>Fcitx5 提供拼音、注音、仓颉、速成、粤拼和日语。使用托盘输入法菜单选择，Ctrl+Space 切换输入状态。KDE 和浏览器使用 live 用户；运维终端和 AI CLI 入口运行于 root 会话，保留各工具自己的操作确认。</p>
-<h2>启动方式</h2><p>Ventoy 使用普通启动。直接烧录的签名 UEFI 镜像可在向固件 db 导入发行证书后启用 Secure Boot。ARM64 通用镜像依赖兼容固件；具体开发板还需要相应内核、设备树和引导组件。</p>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Lynux guide</title>
+<style>
+:root{--bg:#fcfcfc;--fg:#232629;--muted:#5c6166;--accent:#1d99f3;--code:#eff0f1}
+@media (prefers-color-scheme:dark){:root{--bg:#1b1e20;--fg:#fcfcfc;--muted:#a1a9b1;--accent:#3daee9;--code:#2a2e32}}
+body{font:17px/1.7 "Noto Sans","Noto Sans CJK SC",sans-serif;max-width:820px;margin:48px auto;padding:0 20px;background:var(--bg);color:var(--fg)}
+h1{font-size:40px;margin-bottom:0}h2{margin-top:36px}.lead{color:var(--muted);margin-top:4px}
+nav{margin:12px 0 24px}a{color:var(--accent)}code,pre{background:var(--code);border-radius:6px}code{padding:2px 6px}pre{padding:14px 16px;overflow:auto}
+hr{margin:56px 0;border:0;border-top:1px solid var(--code)}
+</style>
+
+<section lang="en">
+<h1>Lynux</h1>
+<p class="lead">A live Arch Linux toolbox for fixing, installing and looking after computers with AI coding agents.</p>
+<nav><b>English</b> | <a href="#zh">中文</a></nav>
+
+<h2>Get online</h2>
+<p>Connect to Wi-Fi or Ethernet from the system tray. Then open the <b>Lynux Welcome</b> window and pick an AI tool: Codex, Claude Code, Kimi Code, DeepSeek Harness or OpenCode. Each opens as root in its own Konsole window, starting in <code>/workspace</code>. Sign in with your own account or API key. DeepSeek Harness runs <code>dsh web</code> and is used in the browser.</p>
+
+<h2>Keep your work</h2>
+<p>By default everything is gone after you shut down. To keep the AI tools' logins and <code>/workspace</code>, open <b>Encrypted storage</b> in the welcome window and create a password-protected file on a USB drive or disk. Next time, unlock it from the same page. System changes and desktop settings are never saved.</p>
+<p>When you lock the storage, Lynux lists any programs still using it and lets you choose which to end. A forgotten password can't be recovered. Encryption isn't a backup: copy the locked container file somewhere safe before switching to a new weekly ISO.</p>
+<p>The same steps from a terminal:</p>
+<pre>sudo lynux-state status
+sudo lynux-state create /run/media/live/USB/Lynux/state.luks --size-gib 8 --make-parent
+sudo lynux-state unlock /run/media/live/USB/Lynux/state.luks
+sudo lynux-state holders
+sudo lynux-state lock</pre>
+
+<h2>Other systems' ISOs</h2>
+<p>Keep ISOs anywhere. On the <b>Disk images</b> page you can check an ISO's SHA-256 against the download page and mount it read-only. To install another system, mount its ISO and ask an AI tool to walk you through it with that system's own installer. Double-check the target disk before anything is partitioned or written.</p>
+<pre>lynux-iso inspect '/path/to/distro.iso'
+sudo lynux-iso mount '/path/to/distro.iso'
+sudo lynux-iso list
+sudo lynux-iso unmount MOUNT_ID</pre>
+
+<h2>Language and input</h2>
+<p>Lynux starts in English with the clock on UTC. Pick another language at the bottom of the welcome window's sidebar: the window switches right away and the desktop switches after you log out. Fcitx5 has Pinyin, Zhuyin, Cangjie, Quick, Jyutping and Japanese ready. Press Ctrl+Space to switch.</p>
+
+<h2>Booting</h2>
+<p>Ventoy boots normally, without Secure Boot. A signed UEFI image written straight to a drive can boot with Secure Boot after you add the release certificate to your firmware's <code>db</code>. The ARM64 image needs UEFI firmware. Specific boards need their own kernel, device tree and bootloader.</p>
+</section>
+
+<hr>
+
+<section lang="zh-CN" id="zh">
+<h1>Lynux</h1>
+<p class="lead">一个 Live Arch Linux 工具箱，配合 AI 编程助手修电脑、装系统、做日常运维。</p>
+<nav><a href="#">English</a> | <b>中文</b></nav>
+
+<h2>先联网</h2>
+<p>在系统托盘连上 Wi-Fi 或有线网络，然后在 <b>Lynux 欢迎</b>窗口里选一个 AI 工具：Codex、Claude Code、Kimi Code、DeepSeek Harness 或 OpenCode。每个工具会以 root 身份在单独的 Konsole 窗口里打开，从 <code>/workspace</code> 开始。用你自己的账号或 API Key 登录。DeepSeek Harness 运行的是 <code>dsh web</code>，在浏览器里使用。</p>
+
+<h2>保留你的工作</h2>
+<p>默认关机后一切都会清空。想保留 AI 工具的登录状态和 <code>/workspace</code>，就在欢迎窗口打开<b>加密存储</b>，在 U 盘或硬盘上建一个有密码保护的文件。下次在同一页解锁即可。系统改动和桌面设置不会保存。</p>
+<p>锁定时，Lynux 会列出还在使用存储的程序，由你决定结束哪些。忘了密码就找不回来。加密不等于备份：换新的周更 ISO 之前，先把锁定状态下的容器文件复制一份。</p>
+<p>也可以在终端里操作：</p>
+<pre>sudo lynux-state status
+sudo lynux-state create /run/media/live/USB/Lynux/state.luks --size-gib 8 --make-parent
+sudo lynux-state unlock /run/media/live/USB/Lynux/state.luks
+sudo lynux-state holders
+sudo lynux-state lock</pre>
+
+<h2>其他系统的 ISO</h2>
+<p>ISO 放在哪里都行。在<b>磁盘镜像</b>页可以对照下载页面校验 SHA-256，也可以只读挂载。要装其他系统，挂载它的 ISO，再让 AI 工具带你用那个系统自己的安装程序一步步装。分区或写盘之前，务必再确认一次目标磁盘。</p>
+<pre>lynux-iso inspect '/路径/发行版.iso'
+sudo lynux-iso mount '/路径/发行版.iso'
+sudo lynux-iso list
+sudo lynux-iso unmount 挂载ID</pre>
+
+<h2>语言和输入法</h2>
+<p>Lynux 默认英文界面，时区为 UTC。在欢迎窗口侧边栏底部可以换语言：窗口马上切换，桌面在注销后切换。Fcitx5 已配好拼音、注音、仓颉、速成、粤拼和日语，按 Ctrl+Space 切换。</p>
+
+<h2>启动方式</h2>
+<p>Ventoy 走普通启动，不需要 Secure Boot。直接写盘的签名 UEFI 镜像，把发布证书加进固件的 <code>db</code> 后就能开 Secure Boot 启动。ARM64 镜像需要 UEFI 固件，具体开发板还需要对应的内核、设备树和引导程序。</p>
+</section>
 </html>

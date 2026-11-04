@@ -11,6 +11,8 @@
 | Model API calls | `scripts/check-providers.sh` | All five CLIs return the expected text from mock Responses, Chat Completions and Messages servers in an isolated network namespace |
 | BIOS/UEFI, CD and USB | `tests/qemu_boot.py` | The guest reports boot success, CLI help works offline, Plasma and Fcitx are running |
 | Secure Boot | `tests/image_matrix.py` | `SecureBoot=1`, bad signatures are rejected, a damaged root filesystem refuses to boot |
+| Welcome window | `lynux-welcome --check` during the image build | Every page loads in every language with no QML errors |
+| Welcome translations | `tests/test_welcome_strings.py` | Every key the QML uses exists in all languages, with matching placeholders |
 | Ventoy | `tests/ventoy_boot.py` | The ISO boots from a throwaway Ventoy disk. The Ventoy version is logged |
 | Release | `scripts/publish.py` | Reports match the final ISO hash, both architectures are present, public downloads verify |
 
@@ -28,10 +30,11 @@ Automated process checks don't replace these:
 
 1. Type Simplified Pinyin, Taiwan Zhuyin, Hong Kong Cangjie/Quick/Jyutping and Japanese in Konsole, a Qt editor and Firefox. Check the candidate window, committing text and switching between methods.
 2. Set up each of the five CLIs and log in with a real account. CI only talks to mock servers. Any cost it prints is the client's estimate for mock tokens, not real spending.
-3. In the welcome window: pick an ISO, mount it read-only, create and unlock a container, edit the workspace, reboot and check it's all still there.
-4. On a throwaway target disk, do an example Arch install, chroot in and repair the bootloader. Write down which disk you used. Never do this on your development machine's system disk.
-5. On physical UEFI machines of both architectures: untrusted certificate is refused, boot works after importing it, a modified UKI is refused, and display, Wi-Fi and input devices work.
-6. Recovery after power loss, a full disk, pulling the drive, upgrading across weekly releases, and opening the shared workspace from the other architecture.
+3. In the welcome window: pick an ISO, mount it read-only, create and unlock a container, edit the workspace, reboot and check it's all still there. Lock while an AI tool and a Dolphin window are open in `/workspace`: both should be listed, and ending them should let the lock finish.
+4. Switch the language in the welcome window, log out, and check Plasma and new Konsole windows come back in that language. Switch back to English.
+5. On a throwaway target disk, do an example Arch install, chroot in and repair the bootloader. Write down which disk you used. Never do this on your development machine's system disk.
+6. On physical UEFI machines of both architectures: untrusted certificate is refused, boot works after importing it, a modified UKI is refused, and display, Wi-Fi and input devices work.
+7. Recovery after power loss, a full disk, pulling the drive, upgrading across weekly releases, and opening the shared workspace from the other architecture.
 
 Each report should list the version, ISO SHA-256, environment and the steps you took. The repo doesn't contain any hardware test results yet, so passing CI doesn't mean Lynux works on all hardware.
 

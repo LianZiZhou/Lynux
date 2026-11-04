@@ -22,6 +22,7 @@ The first dual-architecture release, [v2026.11.04.13.1](https://github.com/LianZ
 
 - Drop the ISO anywhere on a Ventoy drive, next to any other ISOs you have. Ventoy boots don't need Secure Boot.
 - Or write the ISO straight to a USB stick. Keep other distro ISOs on any drive you can reach from the live system.
+- The **Lynux Welcome** window opens at login. It launches the AI tools, sets up encrypted storage, checks and mounts ISOs, and has a language picker. A new language applies to the window right away and to the desktop after you log out.
 - KDE logs in as the normal `live` user. The admin terminal and the CLIs open a root session. SSH is off by default.
 - Everything is lost on reboot unless you set up an encrypted LUKS2 file from the welcome window. That file keeps CLI logins and `/workspace`.
 - A directly written UEFI image can boot with Secure Boot once you add our certificate. See [Secure Boot](docs/secure-boot.md).
@@ -65,6 +66,12 @@ The LUKS2 test runs in a throwaway privileged container and only touches loop fi
 docker run --rm --privileged -e LYNUX_DISPOSABLE_TEST=1 \
   -v "$PWD:/src:ro" -w /src archlinux:base-devel bash -c \
   'bash scripts/setup-downloads.sh && pacman -S --noconfirm cryptsetup e2fsprogs util-linux && python tests/integration_state.py'
+```
+
+To see the welcome window without building an image, render every page offscreen. This needs PySide6, Kirigami, Kirigami Addons and qqc2-desktop-style, for example in an Arch container:
+
+```bash
+python tests/render_welcome.py --output work/welcome-preview --languages en_US zh_CN
 ```
 
 Layout: build config lives in `config/`, files copied into the image in `overlay/`, and the welcome app and helpers in `runtime/`. Never put API keys, S3 credentials or signing keys in any of them.

@@ -1,6 +1,15 @@
 [Desktop Entry]
 Type=Application
-Name=Lynux 运维工作台
+Name=Lynux Welcome
+Name[zh_CN]=Lynux 欢迎
+Name[zh_TW]=Lynux 歡迎
+Name[zh_HK]=Lynux 歡迎
+Name[ja]=Lynux へようこそ
+Comment=AI tools, encrypted storage and disk images
+Comment[zh_CN]=AI 工具、加密存储和磁盘镜像
+Comment[zh_TW]=AI 工具、加密儲存和磁碟映像
+Comment[zh_HK]=AI 工具、加密儲存和磁碟映像
+Comment[ja]=AI ツール、暗号化ストレージ、ディスクイメージ
 Exec=lynux-welcome
-Icon=utilities-terminal
+Icon=lynux
 Categories=System;

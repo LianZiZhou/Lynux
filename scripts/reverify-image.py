@@ -3,12 +3,15 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 
 
-def reverify(directory, checks="all"):
+def reverify(directory, checks="all", acceleration="auto"):
+    if acceleration != "auto":
+        os.environ["LYNUX_QEMU_ACCEL"] = acceleration
     meta = json.loads((directory / "x86_64-build.json").read_text())
     name = meta["iso"]
     if Path(name).name != name or not name.endswith("-x86_64-signed.iso") or meta["arch"] != "x86_64":
@@ -33,4 +36,5 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("directory", type=Path)
     parser.add_argument("--checks", choices=("all", "ventoy"), default="all")
+    parser.add_argument("--acceleration", choices=("auto", "kvm", "tcg"), default="auto")
     reverify(**vars(parser.parse_args()))

@@ -148,6 +148,11 @@ def iso(args):
     meta.update({"schema": 1, "arch": args.arch, "version": args.version, "iso": output.name,
                  "test": args.test, "signed": False})
     (args.work / "build.json").write_text(json.dumps(meta, indent=2) + "\n")
+    # Make the profile cache explicit. Upstream archiso versions differ in how
+    # they choose between an implicit profile default and the host cache.
+    cache = subprocess.check_output(["pacman-conf", "CacheDir"], text=True).splitlines()[0]
+    profile_config = args.work / "profile/pacman.conf"
+    profile_config.write_text(profile_config.read_text().replace("[options]", f"[options]\nCacheDir = {cache}", 1))
     command("python", ROOT / "scripts/prefetch-packages.py", "--config", args.work / "profile/pacman.conf",
             "--packages", args.work / "profile" / f"packages.{args.arch}")
     command("mkarchiso", "-v", "-w", args.work / "archiso", "-o", args.out, args.work / "profile")

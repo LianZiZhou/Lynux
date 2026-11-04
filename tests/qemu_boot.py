@@ -111,7 +111,7 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, ext
         result = {"schema": 1, "arch": arch, "mode": mode, "media": media, "passed": success,
                   "iso_sha256": sha(iso), "expected_marker": expect,
                   "secure_boot": secure, "duration_seconds": round(time.monotonic() - started, 1),
-                  "acceleration": accel}
+                  "acceleration": accel, "qemu_returncode": process.returncode}
         if report:
             report.parent.mkdir(parents=True, exist_ok=True)
             report.write_text(json.dumps(result, indent=2) + "\n")
@@ -119,6 +119,11 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, ext
                 shutil.copy2(serial, report.with_suffix(".serial.log"))
             shutil.copy2(temp / "qemu.log", report.with_suffix(".qemu.log"))
         if not success:
+            print(json.dumps(result, indent=2), flush=True)
+            for log in (temp / "qemu.log", serial):
+                if log.exists():
+                    print(f"--- Last 80 lines of {log.name} ---", flush=True)
+                    print("\n".join(log.read_text(errors="replace").splitlines()[-80:]), flush=True)
             raise RuntimeError(f"QEMU did not produce {expect!r}; see {report}")
         return result
 

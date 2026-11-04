@@ -64,23 +64,45 @@ jobs:
           df -h /
       - name: Prepare native builder
         id: builder
+        timeout-minutes: 20
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y aria2
           bash scripts/ci-container.sh '${{ matrix.arch }}'
+      - name: Restore ARM test firmware
+        if: matrix.arch == 'aarch64'
+        id: arm-firmware-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: out/arm-firmware
+          key: arm-firmware-${{ hashFiles('work/lock/edk2.commit', 'scripts/build-arm-firmware.sh') }}
+      - name: Build or restore ARM test firmware
+        if: matrix.arch == 'aarch64'
+        timeout-minutes: 35
+        env:
+          CONTAINER: ${{ steps.builder.outputs.container }}
+          ARCH: ${{ matrix.arch }}
+        run: bash scripts/ci-stage.sh firmware docker exec "$CONTAINER" bash /src/scripts/build-arm-firmware.sh
+      - name: Save ARM test firmware
+        if: matrix.arch == 'aarch64' && steps.arm-firmware-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: out/arm-firmware
+          key: ${{ steps.arm-firmware-cache.outputs.cache-primary-key }}
       - name: Build complete unsigned image
+        timeout-minutes: 60
         env:
           CONTAINER: ${{ steps.builder.outputs.container }}
           ARCH: ${{ matrix.arch }}
           VERSION: ${{ needs.resolve.outputs.version }}
         run: |
-          docker exec "$CONTAINER" python /src/build iso --arch "$ARCH" --version "$VERSION" \
+          bash scripts/ci-stage.sh image docker exec "$CONTAINER" python /src/build iso --arch "$ARCH" --version "$VERSION" \
             --lock /src/work/lock --work /build/image --out /out
       - name: Test all model clients against an isolated mock service
         env:
           CONTAINER: ${{ steps.builder.outputs.container }}
           ARCH: ${{ matrix.arch }}
-        run: docker exec "$CONTAINER" bash /src/scripts/check-providers.sh "$ARCH" /build/image /out
+        run: bash scripts/ci-stage.sh providers docker exec "$CONTAINER" bash /src/scripts/check-providers.sh "$ARCH" /build/image /out
       - name: Provision signing inputs
         env:
           PUBLISH: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish)) }}
@@ -102,26 +124,34 @@ jobs:
           ARCH: ${{ matrix.arch }}
           VERSION: ${{ needs.resolve.outputs.version }}
         run: |
-          docker exec "$CONTAINER" python /src/scripts/seal.py --work /build/image \
+          bash scripts/ci-stage.sh seal docker exec "$CONTAINER" python /src/scripts/seal.py --work /build/image \
             --iso "/out/lynux-$VERSION-$ARCH.iso" --key /keys/db.key --cert /keys/db.crt
-          docker exec "$CONTAINER" \
+          bash scripts/ci-stage.sh boot docker exec "$CONTAINER" \
             python /src/tests/image_matrix.py --iso "/out/lynux-$VERSION-$ARCH-signed.iso" \
             --arch "$ARCH" --cert /keys/db.crt --secure-work /build/image/secure --report-dir /out
-          docker exec "$CONTAINER" \
+          bash scripts/ci-stage.sh ventoy docker exec "$CONTAINER" \
             python /src/tests/ventoy_boot.py --iso "/out/lynux-$VERSION-$ARCH-signed.iso" \
             --arch "$ARCH" --report "/out/$ARCH-ventoy.json"
-      - uses: actions/upload-artifact@v4
+      - name: Upload diagnostics before large images
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: image-${{ matrix.arch }}
+          name: image-${{ matrix.arch }}-reports
           path: |
-            out/*-signed.iso
             out/*.json
             out/*.txt
             out/*.log
             out/*.png
             out/*.cer
             out/*.crt
+          compression-level: 0
+          retention-days: 7
+      - name: Upload final image
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: image-${{ matrix.arch }}
+          path: out/*-signed.iso
           compression-level: 0
           retention-days: 7
       - name: Clean isolated builder

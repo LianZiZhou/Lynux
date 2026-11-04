@@ -11,7 +11,9 @@ from download import download_many
 
 
 def prefetch(config, packages):
-    cache = Path(subprocess.check_output(["pacman-conf", "CacheDir"], text=True).splitlines()[0])
+    # mkarchiso derives pacstrap's cache from this profile, not /etc/pacman.conf.
+    cache = Path(subprocess.check_output(["pacman-conf", "--config", str(config), "CacheDir"],
+                                        text=True).splitlines()[0])
     cache.mkdir(parents=True, exist_ok=True)
     # Do not let installed host packages suppress target dependencies or pollute another architecture.
     with tempfile.TemporaryDirectory(prefix="lynux-pacman-db-") as directory:

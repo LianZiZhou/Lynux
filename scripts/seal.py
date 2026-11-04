@@ -18,6 +18,13 @@ def sha(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def copy_public_certificate(source, destination):
+    # Signing inputs are mode 0600; public artifacts must be readable by the
+    # unprivileged Actions uploader. Never apply this to the private key.
+    shutil.copyfile(source, destination)
+    destination.chmod(0o644)
+
+
 def seal(work, iso, key, cert):
     meta = json.loads((work / "build.json").read_text())
     arch = meta["arch"]
@@ -112,8 +119,8 @@ def seal(work, iso, key, cert):
     meta.update({"signed": True, "iso": output.name, "sha256": sha(output), "rootfs_sha256": digest,
                  "uki_sha256": sha(uki), "certificate_sha256": sha(secure / "lynux.cer")})
     put(output.parent / f"{arch}-build.json", json.dumps(meta, indent=2) + "\n")
-    shutil.copy2(secure / "lynux.cer", output.parent / "lynux.cer")
-    shutil.copy2(cert, output.parent / "lynux.crt")
+    copy_public_certificate(secure / "lynux.cer", output.parent / "lynux.cer")
+    copy_public_certificate(cert, output.parent / "lynux.crt")
     return output
 
 

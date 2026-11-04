@@ -41,3 +41,4 @@ class BuildTests(unittest.TestCase):
         for arch in ("x86_64", "aarch64"):
             self.assertTrue({"plasma-desktop", "nodejs", "pyside6", "cryptsetup", "fcitx5-mozc"}
                             .issubset(build.packages(arch)))
+        self.assertIn("archlinuxarm-keyring", build.packages("aarch64"))

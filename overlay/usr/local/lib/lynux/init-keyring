@@ -1,8 +1,10 @@
 #!/bin/bash
 set -euo pipefail
+case "$(uname -m)" in
+    aarch64) keyring=archlinuxarm;;
+    x86_64) keyring=archlinux;;
+    *) echo 'Unsupported architecture for the live keyring' >&2; exit 1;;
+esac
+test -s "/usr/share/pacman/keyrings/$keyring.gpg"
 pacman-key --init
-if [[ -f /usr/share/pacman/keyrings/archlinuxarm.gpg ]]; then
-    pacman-key --populate archlinuxarm
-else
-    pacman-key --populate archlinux
-fi
+pacman-key --populate "$keyring"

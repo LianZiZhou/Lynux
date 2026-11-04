@@ -12,7 +12,7 @@
 | Ventoy | `tests/ventoy_boot.py` | 一次性 Ventoy 磁盘实际启动，记录 Ventoy 版本 |
 | 发布 | `scripts/publish.py` | 报告绑定最终 ISO 摘要、双架构齐全、公开下载校验 |
 
-QEMU 的 `opt/lynux-test` fw_cfg 标记启用来宾检查，不需要修改最终 ISO 的命令行或重新签名。超时算失败，不算启动成功。没有 `/dev/kvm` 时使用 TCG，可能需要提高超时。
+QEMU 通过 `opt/lynux-test` fw_cfg 标记和 SMBIOS 产品名 `Lynux CI boot verification` 启用来宾检查，不需要修改最终 ISO 的命令行或重新签名。ARM 内核没有启用 `CONFIG_FW_CFG_SYSFS` 时使用 SMBIOS 标记。超时算失败，不算启动成功。没有 `/dev/kvm` 时使用 TCG；默认单次启动上限为 x86_64 600 秒、ARM64 1200 秒。ARM 虚拟机使用 4 个 vCPU，并给离线 CLI 检查和桌面启动留出软件模拟所需的时间；明确的内核、挂载或检查失败会立即结束测试。
 
 WSL 默认使用 TCG，避免把设备节点存在误认为嵌套虚拟化已验证；已确认可用的环境可用 `LYNUX_QEMU_ACCEL=kvm` 显式覆盖。
 

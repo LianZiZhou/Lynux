@@ -6,6 +6,7 @@ announce() {
     printf '<6>lynux-test: %s\n' "$1" > /dev/kmsg || :
     printf '%s\n' "$1"
 }
+trap 'announce "LYNUX_BOOT_FAILED line=$LINENO"' ERR
 test -d /sys/firmware/efi && announce 'LYNUX_FIRMWARE=UEFI' || announce 'LYNUX_FIRMWARE=BIOS'
 secure_var=/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c
 if [[ -r "$secure_var" ]]; then
@@ -15,11 +16,22 @@ fi
 systemctl is-active --quiet NetworkManager
 systemctl is-active --quiet sddm
 test -s /etc/pacman.d/gnupg/pubring.gpg
-! systemctl is-failed --quiet lynux-keyring
-timeout 180 unshare --net lynux-harness doctor
+if systemctl is-failed --quiet lynux-keyring; then
+    announce 'LYNUX_BOOT_FAILED keyring'
+    exit 1
+fi
+doctor_deadline=180
+desktop_attempts=90
+export LYNUX_DOCTOR_VERBOSE=1 LYNUX_DOCTOR_FAIL_FAST=1
+if [[ $(uname -m) == aarch64 ]]; then
+    doctor_deadline=600
+    desktop_attempts=180
+    export LYNUX_DOCTOR_TIMEOUT=90
+fi
+timeout "$doctor_deadline" unshare --net lynux-harness doctor
 test -d /usr/share/fcitx5
 # An active display manager alone does not prove the desktop logged in.
-for _attempt in {1..90}; do
+for ((_attempt=0; _attempt<desktop_attempts; _attempt++)); do
     if pgrep -u live -x plasmashell >/dev/null && pgrep -u live -x fcitx5 >/dev/null \
        && [[ -f "/run/user/$(id -u live)/lynux-welcome-ready" ]]; then break; fi
     sleep 2

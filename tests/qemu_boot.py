@@ -38,12 +38,14 @@ def screenshot(sockpath, output):
         pass  # Diagnostics must not obscure the actual boot error.
 
 
-def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, extra_disk=None,
+def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=None, extra_disk=None,
          expect="LYNUX_BOOT_OK", report=None, secure=False, abort_on=()):
     if mode == "bios" and arch != "x86_64":
         raise ValueError("BIOS is only supported on x86_64")
     if mode == "uefi" and (not firmware or not variables):
         raise ValueError("UEFI tests need matching firmware CODE and VARS files")
+    if timeout is None:
+        timeout = 1200 if arch == "aarch64" else 600
     with tempfile.TemporaryDirectory(prefix="lynux-qemu-") as directory:
         temp = Path(directory)
         serial = temp / "serial.log"
@@ -59,11 +61,13 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, ext
             machine += ",smm=on"
         cmd = [f"qemu-system-{'x86_64' if arch == 'x86_64' else 'aarch64'}", "-machine", machine,
                "-accel", accel, "-cpu", "host" if accel == "kvm" else ("max" if arch == "x86_64" else "cortex-a72"),
-               "-m", "4096", "-smp", "2", "-display", "none", "-serial", f"file:{serial}", "-no-reboot",
+               "-m", "4096", "-smp", "4" if arch == "aarch64" else "2",
+               "-display", "none", "-serial", f"file:{serial}", "-no-reboot",
                "-device", "virtio-vga" if arch == "x86_64" else "virtio-gpu-pci",
                "-device", "qemu-xhci", "-device", "usb-kbd",
                "-device", "usb-tablet", "-nic", "user,model=virtio-net-pci",
                "-fw_cfg", "name=opt/lynux-test,string=1",
+               "-smbios", "type=1,product=Lynux CI boot verification",
                "-qmp", f"unix:{temp / 'qmp.sock'},server=on,wait=off"]
         if arch == "x86_64":
             # Use one VGA-compatible virtio adapter for x86 firmware/GRUB and Plasma.
@@ -99,7 +103,8 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, ext
                         if expect == "LYNUX_BOOT_OK":
                             time.sleep(4)  # Allow the compositor to present the first painted welcome frame.
                         break
-                    terminal_errors = ("Kernel panic - not syncing", "Falling back to interactive prompt", *abort_on)
+                    terminal_errors = ("Kernel panic - not syncing", "Falling back to interactive prompt",
+                                       "LYNUX_BOOT_FAILED", *abort_on)
                     failure_message = next((message for message in terminal_errors if message in text), None)
                     if failure_message:
                         break
@@ -155,7 +160,7 @@ if __name__ == "__main__":
     parser.add_argument("--media", choices=("cdrom", "usb"), default="cdrom")
     parser.add_argument("--firmware", type=Path)
     parser.add_argument("--variables", type=Path)
-    parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--timeout", type=int, help="Default: 600 seconds on x86_64, 1200 on ARM64")
     parser.add_argument("--extra-disk", type=Path)
     parser.add_argument("--expect", default="LYNUX_BOOT_OK")
     parser.add_argument("--report", type=Path, required=True)

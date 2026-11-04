@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import time
 import uuid
 
 from .common import LynuxError, registry, root_required, session_lock
@@ -30,15 +31,28 @@ def main():
         return
     root_required()
     if args.action == "doctor":
+        try:
+            timeout = int(os.environ.get("LYNUX_DOCTOR_TIMEOUT", "45"))
+        except ValueError as exc:
+            raise LynuxError("Doctor timeout must be an integer") from exc
+        if not 1 <= timeout <= 300:
+            raise LynuxError("Doctor timeout must be between 1 and 300 seconds")
         failed = []
         for tool in specs:
             for flag in ("--version", "--help"):
+                started = time.monotonic()
+                status = "error"
                 try:
-                    result = subprocess.run([binary(tool), flag], capture_output=True, text=True, timeout=45)
+                    result = subprocess.run([binary(tool), flag], capture_output=True, text=True, timeout=timeout)
+                    status = f"exit {result.returncode}"
                     if result.returncode:
                         failed.append(f"{tool} {flag}: exit {result.returncode}")
                 except (OSError, subprocess.TimeoutExpired) as exc:
                     failed.append(f"{tool}: {exc}")
+                if os.environ.get("LYNUX_DOCTOR_VERBOSE") == "1":
+                    print(f"[doctor] {tool} {flag}: {status}, {time.monotonic() - started:.1f}s", flush=True)
+                if failed and os.environ.get("LYNUX_DOCTOR_FAIL_FAST") == "1":
+                    raise LynuxError("\n".join(failed))
         if failed:
             raise LynuxError("\n".join(failed))
         print("五套 CLI 离线启动检查通过。")

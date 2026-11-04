@@ -28,6 +28,30 @@ kernel_spec.loader.exec_module(check_kernel)
 
 
 class CIRegressions(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "Bash hardware-marker check")
+    def test_smbios_enables_boot_checks_without_fw_cfg_but_normal_hardware_does_not(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "bin").mkdir()
+            modprobe = root / "bin/modprobe"
+            modprobe.write_text("#!/bin/sh\nexit 1\n")
+            modprobe.chmod(0o755)
+            product = root / "product"
+            cmdline = root / "cmdline"
+            cmdline.write_text("console=ttyAMA0\n")
+            source = (ROOT / "overlay/usr/local/lib/lynux/test-mode").read_text()
+            source = source.replace("/sys/firmware/qemu_fw_cfg/by_name/opt/lynux-test/raw", str(root / "absent"))
+            source = source.replace("/sys/class/dmi/id/product_name", str(product))
+            source = source.replace("/proc/cmdline", str(cmdline))
+            script = root / "test-mode"
+            script.write_text(source)
+            env = {**os.environ, "PATH": str(root / "bin") + os.pathsep + os.environ["PATH"]}
+            for name, expected in (("Ordinary hardware", 1), ("Lynux CI boot verification", 0),
+                                   ("Lynux CI boot verification extra", 1)):
+                product.write_text(name + "\n")
+                result = subprocess.run(["bash", str(script)], env=env, capture_output=True)
+                self.assertEqual(result.returncode, expected, name)
+
     def test_target_kernel_config_rejects_unsupported_squashfs_compression(self):
         with tempfile.TemporaryDirectory() as directory:
             kernel = Path(directory) / "Image"

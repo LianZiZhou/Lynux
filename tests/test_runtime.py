@@ -5,16 +5,37 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "runtime"))
-from lynux import common, iso, state  # noqa: E402
+from lynux import common, harness, iso, state  # noqa: E402
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_doctor_uses_the_configured_slow_guest_timeout(self):
+        with patch.object(harness, "registry", return_value={"codex": {}}), \
+                patch.object(harness, "root_required"), \
+                patch.object(harness.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run, \
+                patch.dict(os.environ, {"LYNUX_DOCTOR_TIMEOUT": "90", "LYNUX_DOCTOR_VERBOSE": "0"}), \
+                patch.object(sys, "argv", ["lynux-harness", "doctor"]), contextlib.redirect_stdout(io.StringIO()):
+            harness.main()
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args.kwargs["timeout"], 90)
+
+    def test_ci_doctor_stops_on_first_real_failure(self):
+        with patch.object(harness, "registry", return_value={"codex": {}, "claude": {}}), \
+                patch.object(harness, "root_required"), \
+                patch.object(harness.subprocess, "run", return_value=subprocess.CompletedProcess([], 7)) as run, \
+                patch.dict(os.environ, {"LYNUX_DOCTOR_FAIL_FAST": "1", "LYNUX_DOCTOR_TIMEOUT": "45"}), \
+                patch.object(sys, "argv", ["lynux-harness", "doctor"]), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(common.LynuxError, "exit 7"):
+                harness.main()
+        run.assert_called_once()
+
     def test_ventoy_metadata_checksum_and_disk_identity(self):
         blob = bytearray(512)
         blob[:16] = bytes.fromhex("20207777772e76656e746f792e6e6574")

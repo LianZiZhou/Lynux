@@ -118,17 +118,32 @@ jobs:
             openssl req -new -x509 -newkey rsa:3072 -nodes -days 2 -subj '/CN=Lynux CI test only/' \
               -keyout "$RUNNER_TEMP/lynux-keys/db.key" -out "$RUNNER_TEMP/lynux-keys/db.crt"
           fi
-      - name: Sign and verify final image
+      - name: Sign final image
         env:
           CONTAINER: ${{ steps.builder.outputs.container }}
           ARCH: ${{ matrix.arch }}
           VERSION: ${{ needs.resolve.outputs.version }}
         run: |
+          trap 'rm -f "$RUNNER_TEMP/lynux-keys/db.key"' EXIT
           bash scripts/ci-stage.sh seal docker exec "$CONTAINER" python /src/scripts/seal.py --work /build/image \
             --iso "/out/lynux-$VERSION-$ARCH.iso" --key /keys/db.key --cert /keys/db.crt
+      - name: Verify direct boot and integrity
+        timeout-minutes: 50
+        env:
+          CONTAINER: ${{ steps.builder.outputs.container }}
+          ARCH: ${{ matrix.arch }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
           bash scripts/ci-stage.sh boot docker exec "$CONTAINER" \
             python /src/tests/image_matrix.py --iso "/out/lynux-$VERSION-$ARCH-signed.iso" \
             --arch "$ARCH" --cert /keys/db.crt --secure-work /build/image/secure --report-dir /out
+      - name: Verify Ventoy boot
+        timeout-minutes: 30
+        env:
+          CONTAINER: ${{ steps.builder.outputs.container }}
+          ARCH: ${{ matrix.arch }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
           bash scripts/ci-stage.sh ventoy docker exec "$CONTAINER" \
             python /src/tests/ventoy_boot.py --iso "/out/lynux-$VERSION-$ARCH-signed.iso" \
             --arch "$ARCH" --report "/out/$ARCH-ventoy.json"

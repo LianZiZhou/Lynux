@@ -1,3 +1,5 @@
 #!/bin/bash
 modprobe qemu_fw_cfg 2>/dev/null || true
-test -f /sys/firmware/qemu_fw_cfg/by_name/opt/lynux-test/raw || grep -qw 'lynux.test=1' /proc/cmdline
+test -f /sys/firmware/qemu_fw_cfg/by_name/opt/lynux-test/raw \
+    || grep -Fxq 'Lynux CI boot verification' /sys/class/dmi/id/product_name 2>/dev/null \
+    || grep -qw 'lynux.test=1' /proc/cmdline

@@ -19,6 +19,19 @@ def sha(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def log_milestones(text, seen, label):
+    markers = ("LYNUX_FIRMWARE=", "LYNUX_SECURE_BOOT=", "LYNUX_BOOT_OK", "LYNUX_BOOT_FAILED",
+               "LYNUX_INTEGRITY_FAILED", "[doctor]")
+    for line in text.splitlines():
+        for marker in markers:
+            if marker in line:
+                message = line[line.index(marker):].strip()
+                if message not in seen:
+                    seen.add(message)
+                    print(f"[guest {label}] {message}", flush=True)
+                break
+
+
 def screenshot(sockpath, output):
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
@@ -94,9 +107,11 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=None, ex
             process = subprocess.Popen(cmd, stderr=errors, stdout=errors)
             success = False
             failure_message = None
+            milestones = set()
             try:
                 while time.monotonic() - started < timeout:
                     text = serial.read_text(errors="replace") if serial.exists() else ""
+                    log_milestones(text, milestones, f"{arch} {mode}/{media}")
                     if expect in text and (not secure or "LYNUX_SECURE_BOOT=1" in text
                                            or expect == "LYNUX_INTEGRITY_FAILED"):
                         success = True

@@ -28,6 +28,15 @@ kernel_spec.loader.exec_module(check_kernel)
 
 
 class CIRegressions(unittest.TestCase):
+    def test_guest_progress_streams_only_new_acceptance_milestones(self):
+        log = "other output\n[12] LYNUX_SECURE_BOOT=1\n[13] [doctor] codex --help: exit 0, 2.0s\n"
+        seen = set()
+        with patch("builtins.print") as output:
+            qemu_boot.log_milestones(log, seen, "aarch64 uefi/cdrom")
+            qemu_boot.log_milestones(log, seen, "aarch64 uefi/cdrom")
+        self.assertEqual(output.call_count, 2)
+        self.assertEqual(seen, {"LYNUX_SECURE_BOOT=1", "[doctor] codex --help: exit 0, 2.0s"})
+
     @unittest.skipIf(os.name == "nt", "Bash hardware-marker check")
     def test_smbios_enables_boot_checks_without_fw_cfg_but_normal_hardware_does_not(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -16,7 +16,7 @@ def reverify(directory, checks="all", acceleration="auto", arch="x86_64"):
         os.environ["LYNUX_QEMU_ACCEL"] = acceleration
     meta = json.loads((directory / f"{arch}-build.json").read_text())
     name = meta["iso"]
-    if Path(name).name != name or not name.endswith(f"-{arch}-signed.iso") or meta["arch"] != arch:
+    if Path(name).name != name or not (name.endswith(f"-{arch}.iso") or name.endswith(f"-{arch}-signed.iso")) or meta["arch"] != arch:
         raise ValueError("Invalid ISO artifact name/architecture")
     iso = directory / name
     with iso.open("rb") as stream:

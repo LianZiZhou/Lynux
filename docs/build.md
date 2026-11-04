@@ -128,6 +128,19 @@ Once both architectures pass, the release job checks that the boot reports are t
 3. Creates the GitHub Release.
 4. Updates `latest.json`.
 
+Each release has the same small set of files, named after the version. The same files plus the ISOs go into the S3 version directory:
+
+| File | What it is |
+|---|---|
+| `lynux-<version>-<arch>.iso` | The image (S3 only, too big for GitHub). Linked from the release notes |
+| `SHA256SUMS`, `SHA256SUMS.sig` | Checksums of every file, signed with the release key |
+| `lynux.crt`, `lynux.cer` | The certificate, PEM and DER |
+| `lynux-<version>-<arch>.json` | Build details: hashes, CLI, Node and Python versions, package list |
+| `lynux-<version>-<arch>-test-reports.tar.gz` | Every test report for that architecture, with serial logs and screenshots |
+| `lynux-<version>-dependency-lock.tar.gz` | The dependency lock the build used |
+
+`latest.json` has `images.<arch>.url` and `images.<arch>.sha256` for each ISO, plus `downloads` with every file's URL. Releases up to 2026.11.04.13.1 used the older loose layout (`<arch>-build.json`, `-signed.iso` and so on). `Verify existing image` still reads those.
+
 A failed version directory is kept for debugging. A re-run gets a new version number from the run attempt and never overwrites the old directory. If the Release is created but updating `latest` fails, the old `latest` still works and the log shows the failure. Old versions are never deleted automatically.
 
 Each image is a snapshot of rolling repos. The manifest tells you exactly what went in, but rebuilding it byte for byte later won't work once upstream has moved on. For that you'd need to archive the package repos and every downloaded file yourself.

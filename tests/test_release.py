@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import sys
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
@@ -33,6 +34,12 @@ def fixture(folder):
         (folder / f"{arch}-provider-smoke.json").write_text(json.dumps({"mock_only": True,
             "rootfs_sha256": checksum, "results": {k: {"passed": True}
                 for k in ("codex", "claude", "kimi", "dsh", "opencode")}}))
+        (folder / f"{arch}-node-version.txt").write_text("v26.13.0\n")
+        (folder / f"{arch}-python-version.txt").write_text("Python 3.14.9\n")
+        (folder / f"{arch}-packages.txt").write_text("linux 6.17.1-1\nplasma-desktop 6.5.0-1\n")
+        (folder / f"{arch}-secure-usb.serial.log").write_text("LYNUX_BOOT_OK\n")
+    (folder / "aarch64-bootstrap-SHA256SUMS.txt").write_text("ab" * 32 + "  /tmp/archlinuxarm.tar.gz\n")
+    (folder / "dependency-lock.tar.gz").write_bytes(b"lock")
 
 
 class ReleaseTests(unittest.TestCase):
@@ -62,9 +69,45 @@ class ReleaseTests(unittest.TestCase):
             fixture(folder)
             for filename in ("unsigned.iso", "secret.key", "operator-notes.txt"):
                 (folder / filename).write_text("not a release artifact")
-            files, _ = publish.collect(folder)
-            names = {p.name for p in files}
-            self.assertTrue(names.isdisjoint({"unsigned.iso", "secret.key", "operator-notes.txt"}))
+            metadata, _ = publish.collect(folder)
+            with tempfile.TemporaryDirectory() as staging:
+                files = publish.stage(folder, metadata, Path(staging))
+            self.assertEqual(set(files), {
+                "lynux.cer", "lynux.crt", "lynux-2026.11.03.1-dependency-lock.tar.gz",
+                "lynux-2026.11.03.1-x86_64.iso", "lynux-2026.11.03.1-x86_64.json",
+                "lynux-2026.11.03.1-x86_64-test-reports.tar.gz",
+                "lynux-2026.11.03.1-aarch64.iso", "lynux-2026.11.03.1-aarch64.json",
+                "lynux-2026.11.03.1-aarch64-test-reports.tar.gz"})
+
+    def test_release_files_are_bundled_and_described(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as staging:
+            folder = Path(directory)
+            fixture(folder)
+            metadata, tools = publish.collect(folder)
+            files = publish.stage(folder, metadata, Path(staging))
+            details = json.loads(files["lynux-2026.11.03.1-aarch64.json"].read_text())
+            self.assertEqual(details["iso"], "lynux-2026.11.03.1-aarch64.iso")
+            self.assertEqual(details["harnesses"]["claude"], "1.0.0")
+            self.assertEqual(details["python"], "3.14.9")
+            self.assertEqual(details["packages"]["linux"], "6.17.1-1")
+            self.assertEqual(details["bootstrap_rootfs_sha256"], "ab" * 32)
+            self.assertNotIn("test", details)
+            reports = "lynux-2026.11.03.1-x86_64-test-reports"
+            with tarfile.open(files[reports + ".tar.gz"]) as bundle:
+                names = bundle.getnames()
+            self.assertIn(f"{reports}/x86_64-secure-usb.serial.log", names)
+            self.assertTrue(all(name.startswith(f"{reports}/x86_64-") for name in names))
+            again = Path(staging) / "again"
+            again.mkdir()
+            rebuilt = publish.stage(folder, metadata, again)
+            self.assertEqual(publish.sha(rebuilt[reports + ".tar.gz"]), publish.sha(files[reports + ".tar.gz"]))
+            urls = {name: f"https://download.example/{name}" for name in files}
+            hashes = {name: publish.sha(path) for name, path in files.items()}
+            text = publish.notes("2026.11.03.1", "a" * 40, tools, urls, hashes)
+            iso = "lynux-2026.11.03.1-x86_64.iso"
+            self.assertIn(f"[{iso}](https://download.example/{iso})", text)
+            self.assertIn("Claude Code 1.0.0", text)
+            self.assertNotRegex(text, "[一-鿿]")
 
     def test_failed_model_request_blocks_release(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -127,6 +170,41 @@ class ReleaseTests(unittest.TestCase):
                         publish.publish(folder, "owner/repo", "a" * 40)
                     self.assertFalse(any(call.args[0][0] == "gh" for call in execute.call_args_list))
             self.assertFalse(any(call.kwargs["Key"].endswith("latest.json") for call in client.put_object.call_args_list))
+
+    def test_release_gets_only_the_tidy_asset_set(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            fixture(folder)
+            sdk = MagicMock()
+            client = sdk.client.return_value
+            env = {"S3_ENDPOINT": "https://s3.example.test", "S3_BUCKET": "bucket",
+                   "DOWNLOAD_BASE_URL": "https://download.example.test", "RELEASE_SIGNING_KEY": "test.key"}
+            calls = []
+
+            def run(command, **_):
+                calls.append(command)
+                if command[0] == "openssl":
+                    Path(command[command.index("-out") + 1]).write_bytes(b"signature")
+
+            with patch.dict(sys.modules, {"boto3": sdk}), patch.dict(publish.os.environ, env), \
+                 patch.object(publish.subprocess, "run", side_effect=run), \
+                 patch.object(publish, "verify_url"), \
+                 patch.object(publish.subprocess, "check_output", return_value=b"fixture-cert"), \
+                 patch.object(publish.hashlib, "sha256") as digest:
+                digest.return_value.hexdigest.return_value = publish.sha(folder / "lynux.cer")
+                publish.publish(folder, "owner/repo", "a" * 40)
+            release = next(command for command in calls if command[0] == "gh")
+            assets = {Path(argument).name for argument in release[release.index("--notes-file") + 2:]}
+            base = "lynux-2026.11.03.1"
+            self.assertEqual(assets, {"SHA256SUMS", "SHA256SUMS.sig", "lynux.crt", "lynux.cer",
+                                      f"{base}-x86_64.json", f"{base}-aarch64.json",
+                                      f"{base}-x86_64-test-reports.tar.gz", f"{base}-aarch64-test-reports.tar.gz",
+                                      f"{base}-dependency-lock.tar.gz"})
+            uploaded = {call.args[2] for call in client.upload_file.call_args_list}
+            self.assertIn(f"lynux/2026.11.03.1/{base}-x86_64.iso", uploaded)
+            latest = json.loads(client.put_object.call_args_list[-1].kwargs["Body"])
+            self.assertEqual(latest["images"]["aarch64"]["url"],
+                             f"https://download.example.test/lynux/2026.11.03.1/{base}-aarch64.iso")
 
     def test_unfilled_board_template_is_not_a_supported_board(self):
         profile = json.loads((ROOT / "config/boards/template.json").read_text())

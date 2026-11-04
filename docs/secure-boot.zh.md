@@ -31,7 +31,7 @@ openssl x509 -in db.crt -noout -fingerprint -sha256
 ## 校验下载
 
 ```bash
-sha256sum -c SHA256SUMS
+sha256sum --ignore-missing -c SHA256SUMS
 openssl x509 -in lynux.crt -pubkey -noout > release.pub
 openssl dgst -sha256 -verify release.pub -signature SHA256SUMS.sig SHA256SUMS
 ```

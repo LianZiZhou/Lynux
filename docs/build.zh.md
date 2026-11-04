@@ -128,6 +128,19 @@ Ventoy 测试只写新建的临时磁盘文件。夹具安装器的 `dd` 管道�
 3. 创建 GitHub Release。
 4. 更新 `latest.json`。
 
+每个版本发布的文件都是固定的一小组，以版本号命名。S3 版本目录里是同样这些文件再加上 ISO：
+
+| 文件 | 内容 |
+|---|---|
+| `lynux-<版本>-<架构>.iso` | 镜像（只在 S3 上，GitHub 放不下），发布说明里有链接 |
+| `SHA256SUMS`、`SHA256SUMS.sig` | 所有文件的校验和，用发布密钥签名 |
+| `lynux.crt`、`lynux.cer` | 证书，PEM 和 DER 两种格式 |
+| `lynux-<版本>-<架构>.json` | 构建信息：哈希、CLI、Node 和 Python 版本、软件包列表 |
+| `lynux-<版本>-<架构>-test-reports.tar.gz` | 这个架构的全部测试报告，包括串口日志和截图 |
+| `lynux-<版本>-dependency-lock.tar.gz` | 这次构建用的依赖锁 |
+
+`latest.json` 里每个 ISO 有 `images.<架构>.url` 和 `images.<架构>.sha256`，`downloads` 里是所有文件的地址。2026.11.04.13.1 及之前的版本用的是旧的零散文件布局（`<架构>-build.json`、`-signed.iso` 等），`Verify existing image` 依然能读。
+
 失败的版本目录留着方便排查。重跑会根据 run attempt 生成新的版本号，不会覆盖旧目录。如果 Release 建好了但 `latest` 更新失败，旧的 `latest` 依然可用，日志里会写明失败。历史版本不会自动删除。
 
 每个镜像都是滚动仓库的一个快照。清单能告诉你具体装了什么，但上游变了之后，没法再逐字节重建出一模一样的镜像。要做到这一点，得自己把软件包仓库和所有下载过的文件都存档下来。

@@ -69,6 +69,13 @@ class ArtifactPolicyTests(unittest.TestCase):
         self.assertEqual(release_inputs.iso_url({"body": f"[aarch64 ISO]({url})"}, meta, "aarch64"), url)
         with self.assertRaises(ValueError):
             release_inputs.iso_url({"body": "[aarch64 ISO](https://download.example/other.iso)"}, meta, "aarch64")
+        tidy = {"arch": "aarch64", "iso": "lynux-test-aarch64.iso"}
+        url = "https://download.example/lynux-test-aarch64.iso"
+        body = (f"| aarch64 | [lynux-test-aarch64.iso]({url}) |\n"
+                "| x86_64 | [lynux-test-x86_64.iso](https://download.example/lynux-test-x86_64.iso) |")
+        self.assertEqual(release_inputs.iso_url({"body": body}, tidy, "aarch64"), url)
+        with self.assertRaises(ValueError):
+            release_inputs.iso_url({"body": body}, {"arch": "aarch64", "iso": "lynux-test-aarch64.img"}, "aarch64")
 
     def test_dependency_archive_rejects_traversal_and_links(self):
         with tempfile.TemporaryDirectory() as directory:

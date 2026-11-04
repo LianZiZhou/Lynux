@@ -16,8 +16,14 @@ from download import download, verify
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def iso_name_ok(name, arch):
+    # Releases from 2026.11.04.13.1 and earlier publish "-signed.iso"; later ones drop the suffix.
+    return Path(name).name == name and (name.endswith(f"-{arch}.iso") or name.endswith(f"-{arch}-signed.iso"))
+
+
 def release_iso_link(release, arch):
-    matches = re.findall(r"\[" + re.escape(arch) + r" ISO\]\((https://[^\s)]+)\)", release["body"])
+    links = re.findall(r"\]\((https://[^\s)]+)\)", release["body"])
+    matches = [url for url in links if iso_name_ok(Path(unquote(urlsplit(url).path)).name, arch)]
     if len(matches) != 1:
         raise ValueError("Release must contain one matching HTTPS ISO link")
     return matches[0]
@@ -25,12 +31,19 @@ def release_iso_link(release, arch):
 
 def iso_url(release, meta, arch):
     name = meta["iso"]
-    if meta["arch"] != arch or Path(name).name != name or not name.endswith(f"-{arch}-signed.iso"):
+    if meta["arch"] != arch or not iso_name_ok(name, arch):
         raise ValueError("Invalid release image metadata")
     url = release_iso_link(release, arch)
     if Path(unquote(urlsplit(url).path)).name != name:
         raise ValueError("Release ISO link does not match the signed metadata")
     return url
+
+
+def published_name(sums, *candidates):
+    for name in candidates:
+        if name in sums:
+            return name
+    raise ValueError(f"Release is missing all of: {', '.join(candidates)}")
 
 
 def extract_lock(archive, destination):
@@ -79,8 +92,12 @@ def prepare(release, arch, out, lock, metadata_only=False):
         sums[match[2]] = match[1]
     for name in ("lynux.crt", "lynux.cer"):
         verify(out / name, "sha-256=" + sums[name])
-    for name in (f"{arch}-build.json", "dependency-lock.tar.gz"):
-        download(asset_url(name), out / name, "sha-256=" + sums[name])
+    base = f"lynux-{release['tag_name'].removeprefix('v')}"
+    # Save under fixed local names, which reverify-image.py reads, whatever the release layout.
+    for local, candidates in ((f"{arch}-build.json", (f"{base}-{arch}.json", f"{arch}-build.json")),
+                              ("dependency-lock.tar.gz", (f"{base}-dependency-lock.tar.gz", "dependency-lock.tar.gz"))):
+        name = published_name(sums, *candidates)
+        download(asset_url(name), out / local, "sha-256=" + sums[name])
     meta = json.loads((out / f"{arch}-build.json").read_text())
     if not meta.get("signed") or release["tag_name"] != "v" + meta["version"]:
         raise ValueError("Release tag does not identify the signed image version")

@@ -53,4 +53,14 @@ Windows + WSL2 x86_64；使用隔离 Arch 容器构建，在 QEMU 中验证。
 ISO SHA-256：`9251571949ca24d3857dd868e8441bd18bd0ed62b75bfcdadd35b760f8e1dd36`。
 逐项报告和截图保存在本地 `out/`；报告绑定最终 ISO/rootfs 摘要。
 
-尚未完成：ARM64 ISO 的实际构建和启动验收、具体 Armbian 板型实机验证、真实账号登录、四类输入法在所有目标应用中的逐项实操，以及目标发行版完整安装验收。S3/GitHub 正式发布尚未接入。ARM64 软件包清单已完成仓库可用性检查，但这不等于 ARM64 镜像已通过构建。
+尚未完成：ARM64 ISO 的实际构建和启动验收、具体 Armbian 板型实机验证、真实账号登录、四类输入法在所有目标应用中的逐项实操，以及目标发行版完整安装验收。S3/GitHub 正式发布已配置，但尚未成功发布。ARM64 软件包清单已完成仓库可用性检查，但这不等于 ARM64 镜像已通过构建。
+
+### 2026-11-04 GitHub runner 复验
+
+候选版本 `2026.11.04.5.1` 使用长期正式证书，x86_64 ISO SHA-256 为
+`8eaf26e840253b4d2b3ac515bba69514c84356bc2e82125b28beee95826148da`。
+
+- [直接启动复验](https://github.com/LianZiZhou/Lynux/actions/runs/41775115851)中的 BIOS 光驱／USB、UEFI Secure Boot 光驱／USB，以及损坏根文件系统拒绝启动报告全部通过；该次运行的 Ventoy 项失败，整体运行未通过。
+- 修正测试介质写入后，[Ventoy 单项复验](https://github.com/LianZiZhou/Lynux/actions/runs/41783213425)通过。使用 Ventoy 1.1.18、包含中文和空格的 ISO 路径；EFI 分区与官方原始镜像一致，来宾返回 `LYNUX_BOOT_OK`。
+
+这两轮使用同一个 ISO，仅重验测试工具与介质制作过程；不等于双架构正式发布已完成。

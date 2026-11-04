@@ -92,6 +92,8 @@ GitHub 临时托管 runner 会先清理预装的 Android、.NET、GHC 和 hosted
 
 测试工具显式安装 `qemu-hw-display-virtio-gpu` 和 `qemu-hw-display-virtio-gpu-pci`，x86 另安装 `qemu-hw-display-virtio-vga`，并在构建镜像前初始化设备自检；不能只安装 PCI 包并假设它会自动带入基础模块。x86 使用单个 VGA 兼容的 virtio 显卡，ARM 使用 virtio PCI 显卡。可手动运行 `Verify existing x86_64 image` 工作流，输入原构建的 run ID，复用其 ISO 和公钥证书重验；可选择仅复验 Ventoy，该工作流不使用签名私钥、不上传 S3，也不发布 Release。调试任务在 QEMU 段错误时记录限时 GDB 回溯，崩溃和来宾启动失败都仍然阻止测试通过。
 
+Ventoy 测试只写新建的临时磁盘文件。夹具安装器的管道 `dd` 使用 `iflag=fullblock`，避免短读使 EFI 分区被截断；安装后逐字节对照官方压缩包中的原始 EFI 镜像，并校验复制到数据分区的 ISO 摘要。介质制作失败与来宾启动失败分别报告，不能用损坏的测试 U 盘推断 ISO 不兼容。
+
 ## 发布事务
 
 两个架构成功后，发布任务验证最终 ISO 与启动报告的摘要绑定、五套 CLI 版本一致，以及 BIOS、Ventoy 和签名完整性测试结果。先用条件写入占用独立版本目录，再上传并通过公开 HTTPS 逐个下载校验，然后创建 GitHub Release，最后更新 `latest.json`。

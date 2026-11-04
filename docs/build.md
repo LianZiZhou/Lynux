@@ -88,7 +88,7 @@ GitHub 临时托管 runner 会先清理预装的 Android、.NET、GHC 和 hosted
 
 镜像、固件及启动测试阶段每分钟记录实际进程、CPU、内存、磁盘使用和日志字节数。环境准备、ARM 固件和镜像构建分别设有 20、35、60 分钟超时。QEMU 失败时直接打印退出码和日志尾部；诊断文件先单独上传，再上传 ISO，避免大文件上传故障丢失诊断信息。
 
-若 QEMU 进程在 KVM 模式下发生 SIGSEGV（退出码 -11），测试保存 `*-kvm-crash.*` 诊断文件，并对同一 ISO 改用 TCG 重试；只有来宾实际完成原有验收条件才算通过。来宾启动失败或超时不会触发这个回退。可手动运行 `Verify existing x86_64 image` 工作流，输入原构建的 run ID，复用其 ISO 和公钥证书重验；该工作流不使用签名私钥、不上传 S3，也不发布 Release。
+测试工具显式安装 `qemu-hw-display-virtio-gpu` 和 `qemu-hw-display-virtio-gpu-pci`，并在构建镜像前初始化设备自检；不能只安装 PCI 包并假设它会自动带入基础模块。可手动运行 `Verify existing x86_64 image` 工作流，输入原构建的 run ID，复用其 ISO 和公钥证书重验；该工作流不使用签名私钥、不上传 S3，也不发布 Release。调试任务在 QEMU 段错误时记录限时 GDB 回溯，崩溃和来宾启动失败都仍然阻止测试通过。
 
 ## 发布事务
 

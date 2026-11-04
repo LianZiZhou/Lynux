@@ -14,9 +14,30 @@ import seal  # noqa: E402
 spec = importlib.util.spec_from_file_location("prefetch_packages", ROOT / "scripts/prefetch-packages.py")
 prefetch_packages = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(prefetch_packages)
+qemu_spec = importlib.util.spec_from_file_location("check_qemu", ROOT / "scripts/check-qemu.py")
+check_qemu = importlib.util.module_from_spec(qemu_spec)
+qemu_spec.loader.exec_module(check_qemu)
 
 
 class CIRegressions(unittest.TestCase):
+    def test_device_preflight_rejects_emulator_crash_before_image_build(self):
+        with patch.object(check_qemu.subprocess, "Popen") as launch:
+            process = launch.return_value
+            process.communicate.return_value = ("", None)
+            process.poll.return_value = -11
+            process.returncode = -11
+            with self.assertRaisesRegex(RuntimeError, "exited -11"):
+                check_qemu.check("x86_64")
+
+    def test_device_preflight_cleans_up_paused_emulator(self):
+        with patch.object(check_qemu.subprocess, "Popen") as launch, patch("builtins.print"):
+            process = launch.return_value
+            process.communicate.side_effect = [subprocess.TimeoutExpired([], 2), ("", None)]
+            process.poll.return_value = None
+            check_qemu.check("aarch64")
+            process.terminate.assert_called_once()
+            self.assertIn("virtio-gpu-pci", launch.call_args.args[0])
+
     def test_builder_prefetch_skips_an_already_installed_set(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch.object(prefetch_packages.subprocess, "check_output", side_effect=[directory + "\n", ""]) as query, \

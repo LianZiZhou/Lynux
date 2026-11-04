@@ -11,7 +11,7 @@ sed -i '/^CheckSpace/a CacheDir = /build/pacman-cache' /etc/pacman.conf
 pacman -Syu --noconfirm
 packages=(arch-install-scripts squashfs-tools dosfstools libisoburn mtools
   e2fsprogs parted exfatprogs grub python python-yaml python-docutils git make gnupg npm nodejs systemd-ukify sbsigntools cpio zstd
-  qemu-hw-display-virtio-gpu-pci virt-firmware openssl)
+  qemu-hw-display-virtio-gpu qemu-hw-display-virtio-gpu-pci virt-firmware openssl)
 if [[ "$arch" == x86_64 ]]; then
     packages+=(syslinux qemu-system-x86 edk2-ovmf)
 else
@@ -22,6 +22,7 @@ fi
 printf '%s\n' "${packages[@]}" > /build/builder-packages.txt
 python /src/scripts/prefetch-packages.py --config /etc/pacman.conf --packages /build/builder-packages.txt --installed
 pacman -S --needed --noconfirm "${packages[@]}"
+python /src/scripts/check-qemu.py "$arch"
 # ARM support varies in packaged archiso; pin one upstream commit in the shared resolver job.
 commit=$(cat "${LYNUX_LOCK_DIR:-/src/work/lock}/archiso.commit")
 [[ "$commit" =~ ^[a-f0-9]{40}$ ]] || exit 1

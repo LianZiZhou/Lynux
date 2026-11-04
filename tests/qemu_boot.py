@@ -39,7 +39,7 @@ def screenshot(sockpath, output):
 
 
 def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, extra_disk=None,
-         expect="LYNUX_BOOT_OK", report=None, secure=False, acceleration=None):
+         expect="LYNUX_BOOT_OK", report=None, secure=False):
     if mode == "bios" and arch != "x86_64":
         raise ValueError("BIOS is only supported on x86_64")
     if mode == "uefi" and (not firmware or not variables):
@@ -51,7 +51,7 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, ext
         default_accel = "kvm" if ("microsoft" not in platform.release().lower()
                                   and Path("/dev/kvm").exists()
                                   and os.access("/dev/kvm", os.R_OK | os.W_OK)) else "tcg"
-        accel = acceleration or os.environ.get("LYNUX_QEMU_ACCEL", default_accel)
+        accel = os.environ.get("LYNUX_QEMU_ACCEL", default_accel)
         if accel not in ("kvm", "tcg"):
             raise ValueError("LYNUX_QEMU_ACCEL must be kvm or tcg")
         machine = "q35" if arch == "x86_64" else "virt"
@@ -134,23 +134,6 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, ext
                 print(trace.stdout, flush=True)
                 if report:
                     report.with_suffix(f".{accel}.gdb.log").write_text(trace.stdout)
-            if accel == "kvm" and process.returncode == -11:
-                # Some hosted nested-KVM combinations crash QEMU itself before
-                # firmware runs. Preserve the crash evidence and retry the exact
-                # same image under software emulation. Guest failures/timeouts
-                # are not eligible for this fallback.
-                if report:
-                    for suffix in (".json", ".serial.log", ".qemu.log", ".png"):
-                        source = report.with_suffix(suffix)
-                        if source.exists():
-                            shutil.copy2(source, report.with_name(report.stem + "-kvm-crash" + suffix))
-                print("QEMU crashed with SIGSEGV under KVM; retrying identical boot test with TCG.", flush=True)
-                retry = boot(iso, arch, mode, media, firmware, variables, timeout, extra_disk,
-                             expect, report, secure, acceleration="tcg")
-                retry["kvm_crash_retry"] = True
-                if report:
-                    report.write_text(json.dumps(retry, indent=2) + "\n")
-                return retry
             raise RuntimeError(f"QEMU did not produce {expect!r}; see {report}")
         return result
 

@@ -39,7 +39,7 @@ jobs:
     env:
       ARCH: ${{ inputs.arch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Reclaim disposable runner space
         if: runner.environment == 'github-hosted'
         run: bash scripts/reclaim-runner-space.sh

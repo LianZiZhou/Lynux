@@ -1,0 +1,61 @@
+name: Delete CI artifacts
+on:
+  workflow_run:
+    workflows:
+      - Weekly Lynux images
+      - Verify existing image
+      - Verify existing x86_64 image
+      - Source and storage checks
+    types: [completed]
+  workflow_dispatch:
+  schedule:
+    - cron: '43 * * * *'
+permissions:
+  actions: write
+concurrency:
+  group: lynux-artifact-cleanup
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # Do not check out or execute code/artifacts from the triggering run.
+      # This privileged workflow uses only GitHub's artifact APIs, never S3 secrets.
+      - uses: actions/github-script@v7
+        with:
+          retries: 3
+          script: |
+            const repo = context.repo;
+            // Snapshot the entire paginated list before deletion to avoid skipping shifted pages.
+            // Sweep every completed run, so coalesced completion events cannot leave leftovers.
+            const artifacts = await github.paginate(github.rest.actions.listArtifactsForRepo, {...repo, per_page: 100});
+            const groups = new Map();
+            for (const artifact of artifacts) {
+              const runId = artifact.workflow_run?.id;
+              if (!runId) throw new Error(`Artifact ${artifact.id} has no owning run; refusing an unscoped deletion`);
+              if (!groups.has(runId)) groups.set(runId, []);
+              groups.get(runId).push(artifact);
+            }
+            let deleted = 0;
+            let bytes = 0;
+            let active = 0;
+            for (const [runId, items] of groups) {
+              const {data: run} = await github.rest.actions.getWorkflowRun({...repo, run_id: runId});
+              if (run.status !== 'completed') {
+                active += items.length;
+                continue; // Running jobs may still need these files for cross-job transfers.
+              }
+              for (const artifact of items) {
+                try {
+                  await github.rest.actions.deleteArtifact({...repo, artifact_id: artifact.id});
+                  deleted++;
+                  bytes += artifact.size_in_bytes;
+                } catch (error) {
+                  if (error.status !== 404) throw error; // Already expired/deleted is harmless.
+                }
+              }
+            }
+            await core.summary.addHeading('CI artifact cleanup')
+              .addRaw(`Deleted ${deleted} artifacts (${bytes} bytes). Skipped ${active} artifacts belonging to active runs.`)
+              .write();

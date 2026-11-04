@@ -35,7 +35,7 @@ jobs:
         with:
           name: dependency-lock
           path: work/lock
-          retention-days: 30
+          retention-days: 1 # Fallback only; cleanup-artifacts.yml deletes after completion.
   build:
     needs: resolve
     # Signing has main-only deployment rules; Testing must contain no secrets.
@@ -149,7 +149,7 @@ jobs:
             --arch "$ARCH" --report "/out/$ARCH-ventoy.json"
       - name: Upload diagnostics before large images
         uses: actions/upload-artifact@v4
-        if: always()
+        if: success() && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish))
         with:
           name: image-${{ matrix.arch }}-reports
           path: |
@@ -160,15 +160,15 @@ jobs:
             out/*.cer
             out/*.crt
           compression-level: 0
-          retention-days: 7
+          retention-days: 1
       - name: Upload final image
         uses: actions/upload-artifact@v4
-        if: always()
+        if: success() && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish))
         with:
           name: image-${{ matrix.arch }}
           path: out/*-signed.iso
           compression-level: 0
-          retention-days: 7
+          retention-days: 1
       - name: Clean isolated builder
         if: always()
         env:

@@ -78,7 +78,11 @@ Environment secrets（均不放在仓库级）：
 
 下载域名需要真实公开读取权限和正确的内容服务；脚本不创建 bucket、不修改公开策略、不部署 DNS。S3 服务必须支持条件创建 `If-None-Match: *`，用于防止同名版本被覆盖。
 
-PR 只执行源代码及一次性存储测试，不运行带发布凭据的任务。主分支的定时发布或 `publish=true` 缺少长期密钥时失败。手动 `publish=false` 使用临时证书，产物仅保存在 Actions artifacts。
+PR 只执行源代码及一次性存储测试，不运行带发布凭据的任务。主分支的定时发布或 `publish=true` 缺少长期密钥时失败。手动 `publish=false` 使用临时证书，仅保留运行日志与摘要，不保留 ISO 或诊断 Artifacts；需要保存测试镜像时请在本地构建。
+
+Actions Artifacts 只用于周更流水线内部传递依赖锁和正式发布所需的镜像、报告。`Delete CI artifacts` 在现有工作流结束后自动清理，成功、失败、取消均适用；每小时还会扫描所有已完成运行作为兜底，跳过仍在运行的任务。上传时的 1 天保留期仅是自动清理服务异常时的最后保障，不代表正常保留一天。清理工作流不执行触发分支的代码，也不访问 S3 凭据。S3 镜像、GitHub Release 附件、Actions 日志和构建缓存不属于本次 Artifacts 清理范围。
+
+流程结束后中间产物已删除，重新构建请新建一次完整的手动运行，不要依赖旧 Artifacts 只重跑失败的 job。
 
 GitHub 临时托管 runner 会先清理预装的 Android、.NET、GHC 和 hosted tool cache 以释放空间；35 GiB 预检仍失败时请配置有足够空间的 runner。这一步只在 `github-hosted` 执行，不清理自托管 runner 上的工具或项目。
 
@@ -88,9 +92,9 @@ GitHub 临时托管 runner 会先清理预装的 Android、.NET、GHC 和 hosted
 
 x86_64 只读系统使用 Zstd level 15、1 MiB 块压缩，以减少每轮构建和启动解压时间。ARM64 使用 XZ（1 MiB 字典），匹配 Arch Linux ARM 内核启用的 SquashFS 解压器；构建时检查目标内核的嵌入配置，不能把 initramfs 支持 Zstd 误认为 SquashFS 也支持。Zstd 通常比 XZ 生成更大的镜像；完整 ISO 通过 S3 发布，大小以当轮清单为准。构建工具依赖也先批量预下载，再交给 pacman 验签安装。
 
-镜像、固件及启动测试阶段每分钟记录实际进程、CPU、内存、磁盘使用和日志字节数。环境准备、ARM 固件和镜像构建分别设有 20、35、60 分钟超时。QEMU 失败时直接打印退出码和日志尾部；诊断文件先单独上传，再上传 ISO，避免大文件上传故障丢失诊断信息。
+镜像、固件及启动测试阶段每分钟记录实际进程、CPU、内存、磁盘使用和日志字节数。环境准备、ARM 固件和镜像构建分别设有 20、35、60 分钟超时。QEMU 失败时直接打印退出码和日志尾部；失败或测试构建不上传诊断 Artifacts。正式发布成功后的验证报告随 Release/S3 保存。
 
-测试工具显式安装 `qemu-hw-display-virtio-gpu` 和 `qemu-hw-display-virtio-gpu-pci`，x86 另安装 `qemu-hw-display-virtio-vga`，并在构建镜像前初始化设备自检；不能只安装 PCI 包并假设它会自动带入基础模块。x86 使用单个 VGA 兼容的 virtio 显卡，ARM 使用 virtio PCI 显卡。可手动运行 `Verify existing image` 工作流，输入原构建的 run ID 并选择架构，复用其 ISO 和公钥证书重验；可选择仅复验 Ventoy，该工作流不使用签名私钥、不上传 S3，也不发布 Release。调试任务在 QEMU 段错误时记录限时 GDB 回溯，崩溃和来宾启动失败都仍然阻止测试通过。
+测试工具显式安装 `qemu-hw-display-virtio-gpu` 和 `qemu-hw-display-virtio-gpu-pci`，x86 另安装 `qemu-hw-display-virtio-vga`，并在构建镜像前初始化设备自检；不能只安装 PCI 包并假设它会自动带入基础模块。x86 使用单个 VGA 兼容的 virtio 显卡，ARM 使用 virtio PCI 显卡。可手动运行 `Verify existing image` 工作流，输入已发布的 Release tag 并选择架构，从 Release/S3 经 aria2 下载 ISO、证书和依赖锁，验证已登记证书、清单签名及文件摘要后重验；可选择仅复验 Ventoy。该流程不依赖历史 Artifacts，不使用签名私钥，不上传 S3 或发布 Release；结果写入日志和运行摘要。调试任务在 QEMU 段错误时记录限时 GDB 回溯，崩溃和来宾启动失败都仍然阻止测试通过。
 
 Ventoy 测试只写新建的临时磁盘文件。夹具安装器的管道 `dd` 使用 `iflag=fullblock`，避免短读使 EFI 分区被截断；安装后逐字节对照官方压缩包中的原始 EFI 镜像，并校验复制到数据分区的 ISO 摘要。介质制作失败与来宾启动失败分别报告，不能用损坏的测试 U 盘推断 ISO 不兼容。
 

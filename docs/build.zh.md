@@ -99,7 +99,7 @@ Environment secrets（都不要放在仓库级）：
 - **定时运行，或 `main` 上 `publish=true`**：缺长期密钥就失败。
 - **手动运行且 `publish=false`**：用临时证书，只留日志和运行摘要，不把 ISO 或诊断文件存成 Artifacts。想留测试镜像请在本地构建。
 
-GitHub 托管的 runner 会先删掉预装的 Android、.NET、GHC 和 hosted tool cache 腾空间。35 GiB 检查还是不过，就换一个磁盘更大的 runner。这一步只在 `github-hosted` 上执行，不会动自托管 runner。
+GitHub 托管的 runner 会先运行 `scripts/reclaim-runner-space.sh`，删掉构建用不到的预装 SDK（Android、.NET、Haskell、Java、Swift、PowerShell、各种云 CLI 等）和缓存的 Docker 镜像。有些托管 runner 只有 72 GB 磁盘，而 x86_64 构建在 runner 自身文件之外还要大约 27 GB。35 GiB 检查还是不过，就换一个磁盘更大的 runner。这个脚本只肯在 `github-hosted` runner 上运行，不会动自托管 runner。
 
 镜像、固件和启动测试阶段每分钟记录一次进程、CPU、内存、磁盘占用和日志大小。环境准备、ARM 固件和镜像构建的超时分别是 20、35、60 分钟。QEMU 失败时会马上打印退出码和日志末尾。
 

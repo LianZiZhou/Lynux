@@ -99,7 +99,7 @@ The download domain must really serve the bucket publicly. The scripts don't cre
 - **Scheduled runs, or `publish=true` on `main`** fail if the long-term keys are missing.
 - **Manual runs with `publish=false`** use a throwaway certificate and keep only logs and the run summary. No ISO or diagnostics are kept as Artifacts. If you want to keep a test image, build it locally.
 
-GitHub-hosted runners first delete the preinstalled Android, .NET and GHC SDKs and the hosted tool cache to free space. If the 35 GiB check still fails, use a runner with more disk. This cleanup only runs on `github-hosted` runners and never touches self-hosted ones.
+GitHub-hosted runners first run `scripts/reclaim-runner-space.sh`, which deletes preinstalled SDKs the build never uses (Android, .NET, Haskell, Java, Swift, PowerShell, cloud CLIs and so on) and cached Docker images. Some hosted runners only have a 72 GB disk, and the x86_64 build needs about 27 GB on top of the runner's own files. If the 35 GiB check still fails, use a runner with more disk. The script refuses to run anywhere but a `github-hosted` runner, so it never touches self-hosted ones.
 
 Image, firmware and boot-test steps log processes, CPU, memory, disk use and log size every minute. Setup, ARM firmware and image builds time out after 20, 35 and 60 minutes. When QEMU fails, the exit code and the end of its log are printed right away.
 

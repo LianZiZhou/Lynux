@@ -59,9 +59,7 @@ jobs:
           path: work/lock
       - name: Reclaim SDK space on disposable hosted runners
         if: runner.environment == 'github-hosted'
-        run: |
-          sudo rm -rf -- /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
-          df -h /
+        run: bash scripts/reclaim-runner-space.sh
       - name: Prepare native builder
         id: builder
         timeout-minutes: 20

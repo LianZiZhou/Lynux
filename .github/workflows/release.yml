@@ -31,7 +31,7 @@ jobs:
         run: echo "value=$(date -u +%Y.%m.%d).${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
       - run: bash tests/check.sh
       - run: python3 scripts/resolve.py --out work/lock
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dependency-lock
           path: work/lock
@@ -148,7 +148,7 @@ jobs:
             python /src/tests/ventoy_boot.py --iso "/out/lynux-$VERSION-$ARCH-signed.iso" \
             --arch "$ARCH" --report "/out/$ARCH-ventoy.json"
       - name: Upload diagnostics before large images
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: success() && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish))
         with:
           name: image-${{ matrix.arch }}-reports
@@ -162,7 +162,7 @@ jobs:
           compression-level: 0
           retention-days: 1
       - name: Upload final image
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: success() && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish))
         with:
           name: image-${{ matrix.arch }}

@@ -7,6 +7,7 @@ import os
 import platform
 from pathlib import Path
 import shutil
+import shlex
 import socket
 import subprocess
 import tempfile
@@ -83,6 +84,7 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, ext
         if extra_disk:
             cmd += ["-drive", f"if=virtio,format=raw,snapshot=on,file={extra_disk}"]
         started = time.monotonic()
+        print("QEMU command: " + shlex.join(cmd), flush=True)
         with (temp / "qemu.log").open("w") as errors:
             process = subprocess.Popen(cmd, stderr=errors, stdout=errors)
             success = False
@@ -124,6 +126,14 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, ext
                 if log.exists():
                     print(f"--- Last 80 lines of {log.name} ---", flush=True)
                     print("\n".join(log.read_text(errors="replace").splitlines()[-80:]), flush=True)
+            if process.returncode == -11 and os.environ.get("LYNUX_QEMU_DEBUG") == "1":
+                trace = subprocess.run(["timeout", "--kill-after=5", "30", "gdb", "--batch",
+                                        "-ex", "set debuginfod enabled off", "-ex", "run",
+                                        "-ex", "thread apply all bt", "--args", *cmd],
+                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                print(trace.stdout, flush=True)
+                if report:
+                    report.with_suffix(f".{accel}.gdb.log").write_text(trace.stdout)
             if accel == "kvm" and process.returncode == -11:
                 # Some hosted nested-KVM combinations crash QEMU itself before
                 # firmware runs. Preserve the crash evidence and retry the exact

@@ -38,6 +38,9 @@ jobs:
           retention-days: 30
   build:
     needs: resolve
+    # Signing has main-only deployment rules; Testing must contain no secrets.
+    # S3 credentials belong exclusively to Main, never to either build environment.
+    environment: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish)) && 'Signing' || 'Testing' }}
     strategy:
       fail-fast: false
       matrix:
@@ -80,7 +83,7 @@ jobs:
         run: docker exec "$CONTAINER" bash /src/scripts/check-providers.sh "$ARCH" /build/image /out
       - name: Provision signing inputs
         env:
-          PUBLISH: ${{ github.event_name == 'schedule' || inputs.publish }}
+          PUBLISH: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish)) }}
           KEY_B64: ${{ secrets.SECURE_BOOT_KEY_B64 }}
           CERT_B64: ${{ secrets.SECURE_BOOT_CERT_B64 }}
         run: |
@@ -132,7 +135,9 @@ jobs:
           rm -f "$RUNNER_TEMP/lynux-keys/db.key" "$RUNNER_TEMP/lynux-keys/db.crt"
   publish:
     needs: [resolve, build]
-    if: github.event_name == 'schedule' || inputs.publish
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish))
+    # GitHub enforces Main's deployment branch policy before releasing secrets.
+    environment: Main
     runs-on: ubuntu-24.04
     permissions:
       contents: write

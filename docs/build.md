@@ -41,7 +41,17 @@ python scripts/seal.py --work /build/image \
 
 ## GitHub 配置
 
-变量：
+创建三个 GitHub Environments：
+
+- `Main`：仅供发布任务使用。Deployment branches and tags 选择 **Selected branches and tags**，仅添加类型为 **Branch**、名称为 `main` 的规则，不添加 tag 或通配符规则；关闭 **Allow administrators to bypass configured protection rules**。
+- `Signing`：构建正式签名镜像使用，与 `Main` 相同的分支限制和禁止绕过设置，不保存 S3 凭据。
+- `Testing`：测试构建使用，允许各分支，**不保存任何 secrets**。
+
+无需设置 Required reviewers 或 Wait timer，周更可以自动运行。工作流只在 `refs/heads/main` 的定时任务或 `publish=true` 的手动任务中进入正式签名和发布流程。其他分支手动指定 `publish=true` 仍只生成临时签名的测试产物，发布任务跳过。
+
+S3 密钥必须仅存放在 **Main → Environment secrets**。不要另存为 Repository secrets，也不要通过 Organization secrets 授予此仓库访问；否则其他分支的工作流仍可直接引用这些副本。单独的工作流 `if` 条件不能替代 GitHub 的环境分支保护。普通 PR 的源代码检查不引用任何环境。不要新增将不可信 PR 代码带入 `Main` 的 `pull_request_target` 等工作流；能修改环境规则或主分支工作流的管理员仍属于信任边界。
+
+`Main → Environment variables`：
 
 | 名称 | 用途 |
 |---|---|
@@ -50,20 +60,25 @@ python scripts/seal.py --work /build/image \
 | `S3_BUCKET` | 已创建的 bucket |
 | `S3_PREFIX` | 对象前缀，建议 `lynux` |
 | `DOWNLOAD_BASE_URL` | 对应 bucket 根路径的公开 HTTPS 下载域名，不包含前缀 |
-| `X86_RUNNER` / `ARM_RUNNER` | 可选的 runner 标签覆盖；分别需要原生 x86_64 / ARM64、特权 Docker |
-| `DOWNLOAD_CONNECTIONS` / `DOWNLOAD_JOBS` | aria2 每文件连接数／并发文件数，默认 16／8 |
 
-Secrets：
+`Settings → Secrets and variables → Actions → Variables`（仓库级）：
 
 | 名称 | 用途 |
 |---|---|
-| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | 仅限发布 bucket 的上传权限 |
-| `SECURE_BOOT_KEY_B64` | PEM 私钥的 base64 编码 |
-| `SECURE_BOOT_CERT_B64` | 对应 PEM X.509 证书的 base64 编码 |
+| `X86_RUNNER` / `ARM_RUNNER` | 可选的 runner 标签覆盖；分别需要原生 x86_64 / ARM64、特权 Docker |
+| `DOWNLOAD_CONNECTIONS` / `DOWNLOAD_JOBS` | aria2 每文件连接数／并发文件数，默认 16／8 |
+
+Environment secrets（均不放在仓库级）：
+
+| 环境 | 名称 | 用途 |
+|---|---|---|
+| `Main` | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | 仅限发布 bucket 的上传权限 |
+| `Main` 和 `Signing` | `SECURE_BOOT_KEY_B64` | 同一 PEM 私钥的 base64 编码；分别签名发布清单和镜像 |
+| `Signing` | `SECURE_BOOT_CERT_B64` | 对应 PEM X.509 证书的 base64 编码 |
 
 下载域名需要真实公开读取权限和正确的内容服务；脚本不创建 bucket、不修改公开策略、不部署 DNS。S3 服务必须支持条件创建 `If-None-Match: *`，用于防止同名版本被覆盖。
 
-PR 只执行源代码及一次性存储测试，不运行带发布凭据的任务。定时发布或 `publish=true` 缺少长期密钥时失败。手动 `publish=false` 使用临时证书，产物仅保存在 Actions artifacts。
+PR 只执行源代码及一次性存储测试，不运行带发布凭据的任务。主分支的定时发布或 `publish=true` 缺少长期密钥时失败。手动 `publish=false` 使用临时证书，产物仅保存在 Actions artifacts。
 
 GitHub 临时托管 runner 会先清理预装的 Android、.NET、GHC 和 hosted tool cache 以释放空间；35 GiB 预检仍失败时请配置有足够空间的 runner。这一步只在 `github-hosted` 执行，不清理自托管 runner 上的工具或项目。
 

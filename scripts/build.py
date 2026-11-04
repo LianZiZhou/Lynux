@@ -153,9 +153,11 @@ def iso(args):
     cache = subprocess.check_output(["pacman-conf", "CacheDir"], text=True).splitlines()[0]
     profile_config = args.work / "profile/pacman.conf"
     profile_config.write_text(profile_config.read_text().replace("[options]", f"[options]\nCacheDir = {cache}", 1))
+    snapshot = args.work / "repo-snapshot"
     command("python", ROOT / "scripts/prefetch-packages.py", "--config", args.work / "profile/pacman.conf",
-            "--packages", args.work / "profile" / f"packages.{args.arch}")
-    command("mkarchiso", "-v", "-w", args.work / "archiso", "-o", args.out, args.work / "profile")
+            "--packages", args.work / "profile" / f"packages.{args.arch}", "--snapshot", snapshot)
+    command("mkarchiso", "-v", "-w", args.work / "archiso", "-o", args.out, args.work / "profile",
+            env={**os.environ, "LYNUX_PACMAN_DB_SNAPSHOT": str(snapshot.resolve())})
     if not output.exists():
         raise RuntimeError("archiso did not produce the expected ISO")
     for name in ("packages.txt", "harness-versions.json", "node-version.txt", "python-version.txt"):

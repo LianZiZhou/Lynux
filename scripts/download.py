@@ -70,17 +70,18 @@ def download(url, path, checksum=None, fresh=False):
     if checksum:
         cmd += [f"--checksum={checksum}", "--check-integrity=true"]
     command = [*cmd, url]
+    deadline = int(os.environ.get("LYNUX_DOWNLOAD_TIMEOUT", "900"))
     if urlsplit(url).path.endswith((".db.sig", ".files.sig")):
         # Keep the failure status: pacman decides whether a database signature
         # is optional. Do not print aria2's large ERROR block for an absent one.
-        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=deadline)
         if result.returncode == 3:
             print(f"Repository database signature not published: {url}", file=sys.stderr)
         elif result.stdout:
             print(result.stdout, end="", file=sys.stderr)
         result.check_returncode()
     else:
-        subprocess.run(command, check=True)
+        subprocess.run(command, check=True, timeout=deadline)
     verify(path, checksum)
     return path
 
@@ -102,11 +103,13 @@ def download_many(jobs):
             continue
         pending.append((url, path, checksum))
         path.parent.mkdir(parents=True, exist_ok=True)
-        entries.append(f"{url}\n  dir={path.parent}\n  out={path.name}\n  checksum={checksum}\n")
+        integrity = f"  checksum={checksum}\n" if checksum else "  continue=false\n"
+        entries.append(f"{url}\n  dir={path.parent}\n  out={path.name}\n{integrity}")
     if not entries:
         return
     subprocess.run([*options(), "--continue=true", "--check-integrity=true", "--input-file=-"],
-                   input="".join(entries), text=True, check=True)
+                   input="".join(entries), text=True, check=True,
+                   timeout=int(os.environ.get("LYNUX_DOWNLOAD_BATCH_TIMEOUT", "1200")))
     for _, path, checksum in pending:
         verify(Path(path), checksum)
 
@@ -122,3 +125,6 @@ if __name__ == "__main__":
         download(args.url, args.output, f"sha-256={args.sha256}" if args.sha256 else None, args.fresh)
     except subprocess.CalledProcessError as exc:
         raise SystemExit(exc.returncode) from None
+    except subprocess.TimeoutExpired as exc:
+        print(f"Download exceeded the {exc.timeout}s total time limit: {args.output.name}", file=sys.stderr)
+        raise SystemExit(124) from None

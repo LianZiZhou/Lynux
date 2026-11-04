@@ -135,6 +135,8 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, ext
                 if report:
                     report.with_suffix(f".{accel}.gdb.log").write_text(trace.stdout)
             raise RuntimeError(f"QEMU did not produce {expect!r}; see {report}")
+        print(f"PASS: {arch} {mode}/{media}, secure={secure}, marker={expect}, "
+              f"{result['duration_seconds']}s, acceleration={accel}", flush=True)
         return result
 
 

@@ -17,6 +17,15 @@ spec.loader.exec_module(installer)
 
 
 class DownloadTests(unittest.TestCase):
+    def test_detached_signature_batch_does_not_invent_a_checksum(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.object(download.subprocess, "run") as execute:
+                download.download_many([("https://example.test/pkg.sig", Path(folder) / "pkg.sig", None)])
+            script = execute.call_args.kwargs["input"]
+            self.assertNotIn("checksum=", script)
+            self.assertIn("continue=false", script)
+            self.assertEqual(execute.call_args.kwargs["timeout"], 1200)
+
     def test_aria2_multiconnection_and_tls_defaults(self):
         args = download.options()
         self.assertIn("--max-connection-per-server=16", args)

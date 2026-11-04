@@ -1,8 +1,11 @@
 import importlib.util
+import base64
+import io
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -40,7 +43,7 @@ class CIRegressions(unittest.TestCase):
 
     def test_builder_prefetch_skips_an_already_installed_set(self):
         with tempfile.TemporaryDirectory() as directory:
-            with patch.object(prefetch_packages.subprocess, "check_output", side_effect=[directory + "\n", ""]) as query, \
+            with patch.object(prefetch_packages.subprocess, "check_output", side_effect=[directory + "\n", directory, ""]) as query, \
                     patch.object(prefetch_packages.subprocess, "run") as refresh, \
                     patch.object(prefetch_packages, "download_many") as downloads:
                 prefetch_packages.prefetch(Path(directory) / "pacman.conf", ["python"], installed=True)
@@ -64,9 +67,44 @@ class CIRegressions(unittest.TestCase):
 
             with patch.object(prefetch_packages.subprocess, "check_output", side_effect=query), \
                     patch.object(prefetch_packages.subprocess, "run"), \
+                    patch.object(prefetch_packages, "repository_signatures", return_value={"package.pkg.tar.xz": b"signature"}), \
                     patch.object(prefetch_packages, "download_many") as downloads:
                 prefetch_packages.prefetch(config, ["base"])
             self.assertEqual(downloads.call_args.args[0][0][1], target_cache / "package.pkg.tar.xz")
+            downloads.assert_called_once()
+            self.assertEqual((target_cache / "package.pkg.tar.xz.sig").read_bytes(), b"signature")
+
+    def test_repository_signature_is_decoded_from_the_resolved_database(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sync").mkdir()
+            payload = ("%FILENAME%\npkg.pkg.tar.xz\n\n%PGPSIG%\n" +
+                       base64.b64encode(b"detached signature").decode() + "\n\n").encode()
+            with tarfile.open(root / "sync/extra.db", "w:gz") as archive:
+                info = tarfile.TarInfo("pkg-1/desc")
+                info.size = len(payload)
+                archive.addfile(info, io.BytesIO(payload))
+            self.assertEqual(prefetch_packages.repository_signatures(root), {"pkg.pkg.tar.xz": b"detached signature"})
+
+    @unittest.skipIf(os.name == "nt", "Bash snapshot transport")
+    def test_pacstrap_database_refresh_uses_the_pinned_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = root / "snapshot"
+            snapshot.mkdir()
+            (snapshot / "core.db").write_bytes(b"resolved database")
+            output = root / "core.db.part"
+            env = {**os.environ, "LYNUX_PACMAN_DB_SNAPSHOT": str(snapshot)}
+            result = subprocess.run(["bash", str(ROOT / "scripts/pacman-download.sh"),
+                                     "https://unreachable.invalid/core.db", str(output)], env=env,
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(output.read_bytes(), b"resolved database")
+            absent = subprocess.run(["bash", str(ROOT / "scripts/pacman-download.sh"),
+                                     "https://unreachable.invalid/core.db.sig", str(root / "sig")], env=env,
+                                    capture_output=True, text=True)
+            self.assertNotEqual(absent.returncode, 0)
+            self.assertFalse((root / "sig").exists())
 
     @unittest.skipIf(os.name == "nt", "POSIX certificate permissions")
     def test_public_certificate_does_not_inherit_private_input_permissions(self):

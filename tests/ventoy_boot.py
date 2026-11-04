@@ -19,6 +19,8 @@ from qemu_boot import boot, sha
 
 
 def ventoy(iso, arch, report):
+    report.parent.mkdir(parents=True, exist_ok=True)
+    inputs = {"iso_sha256": sha(iso), "arch": arch}
     # Public git refs avoid GitHub's unauthenticated REST API rate limit on shared runners.
     refs = subprocess.check_output(["git", "ls-remote", "--tags", "https://github.com/ventoy/Ventoy.git"], text=True)
     versions = [tuple(map(int, m.groups())) for m in re.finditer(r"refs/tags/v(\d+)\.(\d+)\.(\d+)(?:\^\{\})?\s*$", refs, re.M)]
@@ -28,6 +30,7 @@ def ventoy(iso, arch, report):
         temp = Path(folder)
         archive = temp / "ventoy.tar.gz"
         download(url, archive)
+        inputs.update({"ventoy_version": version, "ventoy_sha256": sha(archive)})
         subprocess.run(["bsdtar", "-xf", str(archive), "-C", str(temp)], check=True)
         tool = next(temp.glob("ventoy-*/Ventoy2Disk.sh"))
         disk = temp / "ventoy.img"
@@ -61,15 +64,30 @@ def ventoy(iso, arch, report):
             relative_iso = Path("ISO images") / "系统" / iso.name
             (mount / relative_iso).parent.mkdir(parents=True)
             shutil.copy2(iso, mount / relative_iso)
+            if sha(mount / relative_iso) != inputs["iso_sha256"]:
+                raise RuntimeError("ISO copy on Ventoy partition differs from source")
             (mount / "ventoy").mkdir()
             (mount / "ventoy/ventoy.json").write_text(json.dumps({"control": [
                 {"VTOY_MENU_TIMEOUT": "3"}, {"VTOY_SECONDARY_BOOT_MENU": "0"}]}))
             subprocess.run(["sync"], check=True)
+            efi_mount = temp / "efi"
+            efi_mount.mkdir()
+            subprocess.run(["mount", "-o", "ro", loop + "p2", str(efi_mount)], check=True)
+            try:
+                inputs["ventoy_efi_sha256"] = {str(path.relative_to(efi_mount)): sha(path)
+                                               for path in sorted(efi_mount.rglob("*"))
+                                               if path.is_file() and path.suffix.lower() == ".efi"}
+            finally:
+                subprocess.run(["umount", str(efi_mount)], check=True)
         finally:
             if mounted:
                 subprocess.run(["umount", str(mount)], check=True)
             subprocess.run(["losetup", "-d", loop], check=True)
         code, variables = firmware(arch, secure=False)
+        inputs.update({"firmware": str(code), "firmware_sha256": sha(code),
+                       "variables": str(variables), "variables_sha256": sha(variables)})
+        report.with_name(report.stem + "-inputs.json").write_text(json.dumps(inputs, indent=2) + "\n")
+        print("Ventoy test inputs: " + json.dumps(inputs), flush=True)
         result = boot(disk, arch, "uefi", "usb", code, variables, report=report,
                       abort_on=("error: cannot load image.", "error: you need to load the kernel first."))
         result.update({"iso_sha256": sha(iso), "iso_path": "/" + relative_iso.as_posix(),

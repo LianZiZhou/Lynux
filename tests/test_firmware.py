@@ -27,3 +27,20 @@ class FirmwareTests(unittest.TestCase):
             self.assertEqual(firmware("x86_64", True, [root])[0], root / "secure.fd")
             with self.assertRaises(RuntimeError):
                 firmware("aarch64", True, [root])
+
+    def test_arm_ventoy_uses_unenrolled_secure_capable_firmware(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "code.fd").touch()
+            (root / "vars.fd").touch()
+            descriptor = {"features": ["secure-boot"], "targets": [{"architecture": "aarch64"}],
+                          "mapping": {"device": "flash", "executable": {"filename": str(root / "code.fd")},
+                                      "nvram-template": {"filename": str(root / "vars.fd")}}}
+            path = root / "40-arm.json"
+            path.write_text(json.dumps(descriptor))
+            self.assertEqual(firmware("aarch64", False, [root]), (root / "code.fd", root / "vars.fd"))
+            self.assertEqual(firmware("aarch64", True, [root])[0], root / "code.fd")
+            descriptor["features"].append("enrolled-keys")
+            path.write_text(json.dumps(descriptor))
+            with self.assertRaises(RuntimeError):
+                firmware("aarch64", False, [root])

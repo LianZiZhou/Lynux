@@ -12,10 +12,17 @@ from qemu_boot import boot, sha
 
 
 def firmware(arch, secure=True, directories=None):
+    fallback = None
     for directory in directories or (Path("/usr/share/qemu/firmware"), Path("/etc/qemu/firmware")):
         for filename in sorted(directory.glob("*.json")):
             data = json.loads(filename.read_text())
-            if ("secure-boot" in data.get("features", [])) != secure:
+            features = data.get("features", [])
+            capable = "secure-boot" in features
+            if secure and not capable:
+                continue
+            # Secure Boot capability does not mean enforcement is enabled. An
+            # un-enrolled ArmVirt template can also boot ordinary Ventoy media.
+            if not secure and "enrolled-keys" in features:
                 continue
             if not any(t.get("architecture") == arch for t in data.get("targets", [])):
                 continue
@@ -27,7 +34,12 @@ def firmware(arch, secure=True, directories=None):
             code = Path(mapping["executable"]["filename"])
             template = Path(mapping["nvram-template"]["filename"])
             if code.exists() and template.exists():
+                if not secure and capable:
+                    fallback = fallback or (code, template)
+                    continue
                 return code, template
+    if fallback:
+        return fallback
     raise RuntimeError(f"No matching QEMU firmware descriptor for {arch}, secure={secure}")
 
 

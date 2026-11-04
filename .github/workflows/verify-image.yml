@@ -1,0 +1,65 @@
+name: Verify existing x86_64 image
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Source weekly build run ID with image-x86_64 and image-x86_64-reports artifacts
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: Testing
+    timeout-minutes: 60
+    env:
+      ARCH: x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reclaim disposable runner space
+        run: sudo rm -rf -- /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
+      - uses: actions/download-artifact@v4
+        with:
+          name: dependency-lock
+          path: work/lock
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: image-x86_64*
+          merge-multiple: true
+          path: out
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Prepare isolated test tools
+        id: builder
+        timeout-minutes: 20
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y aria2
+          bash scripts/ci-container.sh x86_64
+      - name: Verify existing ISO without rebuilding
+        env:
+          CONTAINER: ${{ steps.builder.outputs.container }}
+        run: |
+          bash scripts/ci-stage.sh reverify docker exec "$CONTAINER" python /src/scripts/reverify-image.py /out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reverify-x86_64-reports
+          path: |
+            out/*.json
+            out/*.log
+            out/*.png
+          retention-days: 7
+      - name: Clean test tools
+        if: always()
+        env:
+          CONTAINER: ${{ steps.builder.outputs.container }}
+          VOLUME: ${{ steps.builder.outputs.volume }}
+        run: |
+          if [[ -n "$CONTAINER" ]]; then docker rm -f "$CONTAINER"; fi
+          if [[ -n "$VOLUME" ]]; then docker volume rm "$VOLUME"; fi

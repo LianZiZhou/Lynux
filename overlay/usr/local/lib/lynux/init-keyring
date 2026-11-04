@@ -1,0 +1,8 @@
+#!/bin/bash
+set -euo pipefail
+pacman-key --init
+if [[ -f /usr/share/pacman/keyrings/archlinuxarm.gpg ]]; then
+    pacman-key --populate archlinuxarm
+else
+    pacman-key --populate archlinux
+fi

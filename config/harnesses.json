@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "harnesses": {
+    "codex": {
+      "name": "Codex CLI", "kind": "npm", "package": "@openai/codex", "bin": "codex",
+      "state": [{"path": "/root/.codex", "type": "directory"}]
+    },
+    "claude": {
+      "name": "Claude Code", "kind": "claude-native", "bin": "claude",
+      "env": {"HOME": "/root/.lynux/claude", "XDG_CONFIG_HOME": "/root/.lynux/claude/.config", "XDG_DATA_HOME": "/root/.lynux/claude/.local/share", "XDG_STATE_HOME": "/root/.lynux/claude/.local/state"},
+      "state": [{"path": "/root/.lynux/claude", "type": "directory"}]
+    },
+    "kimi": {
+      "name": "Kimi Code CLI", "kind": "npm", "package": "@moonshot-ai/kimi-code", "bin": "kimi",
+      "state": [{"path": "/root/.kimi-code", "type": "directory"}]
+    },
+    "dsh": {
+      "name": "DeepSeek Harness", "kind": "npm", "package": "@deepseek-ai/dsh", "bin": "dsh",
+      "default_args": ["web"],
+      "env": {"DSH_HOME": "/root/.dsh"},
+      "state": [{"path": "/root/.dsh", "type": "directory"}]
+    },
+    "opencode": {
+      "name": "OpenCode", "kind": "npm", "package": "@opencode/cli", "bin": "opencode",
+      "state": [{"path": "/root/.config/opencode", "type": "directory"}, {"path": "/root/.local/share/opencode", "type": "directory"}, {"path": "/root/.local/state/opencode", "type": "directory"}]
+    }
+  }
+}

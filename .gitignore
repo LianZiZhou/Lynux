@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.cache/
+work/
+out/
+*.iso
+*.img
+*.luks
+*.key
+*.pem
+!tests/fixtures/**

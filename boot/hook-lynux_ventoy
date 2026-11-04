@@ -1,0 +1,23 @@
+#!/usr/bin/ash
+run_hook() {
+    # Run after archiso_loop_mnt, whose normal hook reads and resets img_* arguments.
+    [ -n "${img_dev:-}" ] && [ -n "${img_loop:-}" ] && return 0
+    [ -d /sys/firmware/efi ] || return 0
+    local param=/sys/firmware/efi/efivars/VentoyOsParam-77772020-2e77-6576-6e74-6f792e6e6574
+    if [ ! -r "$param" ]; then
+        mount -t efivarfs efivarfs /sys/firmware/efi/efivars 2>/dev/null || :
+    fi
+    [ -r "$param" ] || return 0
+    local attempt
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        if lynux-ventoy-find > /run/lynux-ventoy-location; then
+            { IFS= read -r img_dev; IFS= read -r img_loop; } < /run/lynux-ventoy-location
+            export img_dev img_loop
+            export img_flags=defaults
+            export mount_handler=archiso_loop_mount_handler
+            msg ':: Lynux located its ISO on the Ventoy data partition'
+            return 0
+        fi
+        sleep 1
+    done
+}

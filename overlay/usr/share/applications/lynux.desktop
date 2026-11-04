@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Lynux 运维工作台
+Exec=lynux-welcome
+Icon=utilities-terminal
+Categories=System;

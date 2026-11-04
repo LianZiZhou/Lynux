@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Lynux root 运维终端
+Exec=konsole --separate -e sudo lynux-harness run shell
+Icon=utilities-terminal
+Categories=System;TerminalEmulator;

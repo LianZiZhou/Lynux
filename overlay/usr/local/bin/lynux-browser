@@ -1,0 +1,8 @@
+#!/bin/bash
+set -euo pipefail
+if [[ $(id -u) == 0 ]]; then
+    uid=$(id -u live)
+    exec runuser -u live -- env XDG_RUNTIME_DIR="/run/user/$uid" \
+      DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" WAYLAND_DISPLAY=wayland-0 xdg-open "$@"
+fi
+exec xdg-open "$@"

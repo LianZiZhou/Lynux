@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "id": "my-board",
+  "description": "Copy and fill every hardware-specific field. Not hardware-verified.",
+  "verified": false,
+  "armbian": {
+    "repository": "https://github.com/armbian/build.git",
+    "commit": "REPLACE_WITH_40_CHARACTER_COMMIT",
+    "board": "REPLACE_WITH_ARMBIAN_BOARD_ID",
+    "branch": "current",
+    "userpatches": "userpatches"
+  },
+  "kernel_package_glob": "linux-image-*.deb",
+  "dtb_package_glob": "linux-dtb-*.deb",
+  "uboot_package_glob": "linux-u-boot-*.deb",
+  "dtb": "REPLACE_WITH_SOC/BOARD.dtb",
+  "kernel_image": "Image",
+  "firmware": [],
+  "image_mib": 12288,
+  "partition_start_mib": 16,
+  "boot_mib": 512,
+  "bootloader_writes": [],
+  "kernel_args": "console=ttyS0,115200",
+  "notes": "Supply explicit bootloader_writes with source (relative extracted package path) and offset_bytes. No default offsets are safe."
+}

@@ -1,0 +1,16 @@
+[Unit]
+Description=Lynux encrypted state shutdown ordering
+After=local-fs.target
+Before=sddm.service
+Conflicts=umount.target
+Before=umount.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/true
+ExecStop=/usr/local/bin/lynux-state lock --shutdown
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

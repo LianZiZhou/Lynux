@@ -1,0 +1,14 @@
+[Unit]
+Description=Initialize the live system package verification keyring
+After=local-fs.target
+Before=multi-user.target
+ConditionPathExists=!/etc/pacman.d/gnupg/pubring.gpg
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+UMask=0077
+ExecStart=/usr/local/lib/lynux/init-keyring
+
+[Install]
+WantedBy=multi-user.target

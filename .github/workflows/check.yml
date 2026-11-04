@@ -1,0 +1,23 @@
+name: Source and storage checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update -qq && sudo apt-get install -y aria2
+      - run: python scripts/install-python-tools.py ruff
+      - run: ruff check runtime scripts tests
+      - run: bash tests/check.sh
+      - name: Actual LUKS2 and bind-mount tests
+        run: |
+          docker run --rm --privileged -e LYNUX_DISPOSABLE_TEST=1 \
+            -v "$PWD:/src:ro" -w /src archlinux:base-devel bash -c \
+            'bash scripts/setup-downloads.sh && pacman -S --noconfirm cryptsetup e2fsprogs util-linux && python tests/integration_state.py'

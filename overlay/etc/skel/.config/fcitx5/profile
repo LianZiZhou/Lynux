@@ -1,0 +1,27 @@
+[Groups/0]
+Name=Default
+Default Layout=us
+DefaultIM=pinyin
+[Groups/0/Items/0]
+Name=keyboard-us
+Layout=
+[Groups/0/Items/1]
+Name=pinyin
+Layout=
+[Groups/0/Items/2]
+Name=chewing
+Layout=
+[Groups/0/Items/3]
+Name=cangjie5
+Layout=
+[Groups/0/Items/4]
+Name=quick5
+Layout=
+[Groups/0/Items/5]
+Name=rime
+Layout=
+[Groups/0/Items/6]
+Name=mozc
+Layout=
+[GroupOrder]
+0=Default

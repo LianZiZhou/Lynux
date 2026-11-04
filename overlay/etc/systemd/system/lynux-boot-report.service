@@ -1,0 +1,12 @@
+[Unit]
+Description=Lynux boot acceptance marker
+After=multi-user.target sddm.service
+
+[Service]
+Type=oneshot
+ExecCondition=/usr/local/lib/lynux/test-mode
+ExecStart=/usr/local/lib/lynux/boot-report
+StandardOutput=journal+console
+
+[Install]
+WantedBy=graphical.target

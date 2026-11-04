@@ -1,0 +1,9 @@
+#!/bin/bash
+build() {
+    add_module efivarfs
+    add_binary /usr/bin/lynux-ventoy-find
+    add_runscript
+}
+help() {
+    echo 'Locate a Ventoy-hosted ISO through its EFI handoff, including UKI boot.'
+}

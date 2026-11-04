@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=Lynux
+Exec=lynux-welcome
+OnlyShowIn=KDE;

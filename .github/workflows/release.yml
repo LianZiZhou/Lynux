@@ -1,0 +1,175 @@
+name: Weekly Lynux images
+on:
+  schedule:
+    - cron: '17 0 * * 1'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish to configured S3 storage and GitHub Release
+        type: boolean
+        default: false
+permissions:
+  contents: read
+env:
+  LYNUX_DOWNLOAD_CONNECTIONS: ${{ vars.DOWNLOAD_CONNECTIONS || '16' }}
+  LYNUX_DOWNLOAD_JOBS: ${{ vars.DOWNLOAD_JOBS || '8' }}
+concurrency:
+  group: lynux-release
+  cancel-in-progress: false
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: sudo apt-get update -qq && sudo apt-get install -y aria2
+      - id: version
+        run: echo "value=$(date -u +%Y.%m.%d).${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - run: bash tests/check.sh
+      - run: python3 scripts/resolve.py --out work/lock
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dependency-lock
+          path: work/lock
+          retention-days: 30
+  build:
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ (matrix.arch == 'x86_64' && vars.X86_RUNNER) || (matrix.arch == 'aarch64' && vars.ARM_RUNNER) || matrix.runner }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dependency-lock
+          path: work/lock
+      - name: Reclaim SDK space on disposable hosted runners
+        if: runner.environment == 'github-hosted'
+        run: |
+          sudo rm -rf -- /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
+          df -h /
+      - name: Prepare native builder
+        id: builder
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y aria2
+          bash scripts/ci-container.sh '${{ matrix.arch }}'
+      - name: Build complete unsigned image
+        env:
+          CONTAINER: ${{ steps.builder.outputs.container }}
+          ARCH: ${{ matrix.arch }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          docker exec "$CONTAINER" python /src/build iso --arch "$ARCH" --version "$VERSION" \
+            --lock /src/work/lock --work /build/image --out /out
+      - name: Test all model clients against an isolated mock service
+        env:
+          CONTAINER: ${{ steps.builder.outputs.container }}
+          ARCH: ${{ matrix.arch }}
+        run: docker exec "$CONTAINER" bash /src/scripts/check-providers.sh "$ARCH" /build/image /out
+      - name: Provision signing inputs
+        env:
+          PUBLISH: ${{ github.event_name == 'schedule' || inputs.publish }}
+          KEY_B64: ${{ secrets.SECURE_BOOT_KEY_B64 }}
+          CERT_B64: ${{ secrets.SECURE_BOOT_CERT_B64 }}
+        run: |
+          umask 077
+          if [[ "$PUBLISH" == true ]]; then
+            test -n "$KEY_B64" && test -n "$CERT_B64"
+            printf '%s' "$KEY_B64" | base64 -d > "$RUNNER_TEMP/lynux-keys/db.key"
+            printf '%s' "$CERT_B64" | base64 -d > "$RUNNER_TEMP/lynux-keys/db.crt"
+          else
+            openssl req -new -x509 -newkey rsa:3072 -nodes -days 2 -subj '/CN=Lynux CI test only/' \
+              -keyout "$RUNNER_TEMP/lynux-keys/db.key" -out "$RUNNER_TEMP/lynux-keys/db.crt"
+          fi
+      - name: Sign and verify final image
+        env:
+          CONTAINER: ${{ steps.builder.outputs.container }}
+          ARCH: ${{ matrix.arch }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          docker exec "$CONTAINER" python /src/scripts/seal.py --work /build/image \
+            --iso "/out/lynux-$VERSION-$ARCH.iso" --key /keys/db.key --cert /keys/db.crt
+          docker exec "$CONTAINER" \
+            python /src/tests/image_matrix.py --iso "/out/lynux-$VERSION-$ARCH-signed.iso" \
+            --arch "$ARCH" --cert /keys/db.crt --secure-work /build/image/secure --report-dir /out
+          docker exec "$CONTAINER" \
+            python /src/tests/ventoy_boot.py --iso "/out/lynux-$VERSION-$ARCH-signed.iso" \
+            --arch "$ARCH" --report "/out/$ARCH-ventoy.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: image-${{ matrix.arch }}
+          path: |
+            out/*-signed.iso
+            out/*.json
+            out/*.txt
+            out/*.log
+            out/*.png
+            out/*.cer
+            out/*.crt
+          compression-level: 0
+          retention-days: 7
+      - name: Clean isolated builder
+        if: always()
+        env:
+          CONTAINER: ${{ steps.builder.outputs.container }}
+          VOLUME: ${{ steps.builder.outputs.volume }}
+        run: |
+          if [[ -n "$CONTAINER" ]]; then docker rm -f "$CONTAINER"; fi
+          if [[ -n "$VOLUME" ]]; then docker volume rm "$VOLUME"; fi
+          rm -f "$RUNNER_TEMP/lynux-keys/db.key" "$RUNNER_TEMP/lynux-keys/db.crt"
+  publish:
+    needs: [resolve, build]
+    if: github.event_name == 'schedule' || inputs.publish
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: image-*
+          merge-multiple: true
+          path: out
+      - uses: actions/download-artifact@v4
+        with:
+          name: dependency-lock
+          path: out/dependency-lock
+      - run: sudo apt-get update -qq && sudo apt-get install -y aria2
+      - run: python scripts/install-python-tools.py boto3
+      - name: Publish only verified complete release
+        env:
+          S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
+          S3_REGION: ${{ vars.S3_REGION }}
+          S3_BUCKET: ${{ vars.S3_BUCKET }}
+          S3_PREFIX: ${{ vars.S3_PREFIX }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          KEY_B64: ${{ secrets.SECURE_BOOT_KEY_B64 }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          umask 077
+          export RELEASE_SIGNING_KEY="$RUNNER_TEMP/release.key"
+          trap 'rm -f "$RELEASE_SIGNING_KEY"' EXIT
+          printf '%s' "$KEY_B64" | base64 -d > "$RELEASE_SIGNING_KEY"
+          tar -czf out/dependency-lock.tar.gz -C out dependency-lock
+          python3 scripts/publish.py --directory out --repository "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA"
+      - name: Failure summary
+        if: failure()
+        run: echo 'Publication failed; the previous latest index has been retained.' >> "$GITHUB_STEP_SUMMARY"

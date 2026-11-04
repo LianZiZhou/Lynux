@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>Lynux 使用说明</title>
+<style>body{font:18px/1.8 sans-serif;max-width:900px;margin:60px auto;padding:0 24px;background:#101827;color:#e8eef6}h1{font-size:48px;color:#7dd3fc}h2{margin-top:36px}code,pre{background:#1e293b;padding:5px 9px;border-radius:6px}pre{padding:18px;overflow:auto}a{color:#7dd3fc}</style>
+<h1>Lynux</h1><p>选择工具，连接模型，开始运维。</p>
+<h2>先连接网络</h2><p>在 KDE 系统托盘连接 Wi-Fi 或有线网络，再从工作台启动 Codex、Claude Code、Kimi Code、DeepSeek Harness 或 OpenCode。模型账号由你配置，工具本身已预装。</p>
+<p>DeepSeek 入口启动官方 <code>dsh web</code>，在普通用户浏览器中使用本地界面；其余工具进入终端交互界面。</p>
+<h2>临时会话与加密工作区</h2><p>默认关机不保留会话。需要保存时，先在文件管理器挂载 Ventoy 数据分区或其他可写存储，再创建／解锁加密容器。密码在终端输入。解锁后 CLI 状态和 <code>/workspace</code> 保存在容器里；系统软件和桌面设置仍是临时的。</p>
+<pre>lynux-state status
+lynux-state create /实际挂载路径/Lynux/state.luks --size-gib 8
+lynux-state unlock /实际挂载路径/Lynux/state.luks
+lynux-state lock</pre>
+<p>先退出所有 CLI 和 root 运维终端，再锁定或切换存储。容器文件不是备份，换新 ISO 前可在锁定状态下复制容器备份。</p>
+<h2>使用其他发行版的 ISO</h2><p>ISO 无需放在固定目录。工作台支持选择文件、计算 SHA-256 和只读挂载。安装时由你与 AI 配合使用发行版原生工具；选择实际目标磁盘后再进行分区或写入。</p>
+<pre>lynux-iso inspect '/实际路径/发行版.iso'
+lynux-iso mount '/实际路径/发行版.iso'
+lynux-iso unmount 挂载ID</pre>
+<h2>输入法与权限</h2><p>Fcitx5 提供拼音、注音、仓颉、速成、粤拼和日语。使用托盘输入法菜单选择，Ctrl+Space 切换输入状态。KDE 和浏览器使用 live 用户；运维终端和 AI CLI 入口运行于 root 会话，保留各工具自己的操作确认。</p>
+<h2>启动方式</h2><p>Ventoy 使用普通启动。直接烧录的签名 UEFI 镜像可在向固件 db 导入发行证书后启用 Secure Boot。ARM64 通用镜像依赖兼容固件；具体开发板还需要相应内核、设备树和引导组件。</p>
+</html>

@@ -1,0 +1,3 @@
+#!/bin/bash
+modprobe qemu_fw_cfg 2>/dev/null || true
+test -f /sys/firmware/qemu_fw_cfg/by_name/opt/lynux-test/raw || grep -qw 'lynux.test=1' /proc/cmdline

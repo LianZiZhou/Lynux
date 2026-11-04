@@ -1,0 +1,30 @@
+#!/bin/bash
+set -euo pipefail
+# agetty can hang up its tty during initialization. Log milestones through printk
+# instead of leaving a tee process attached to a tty that can disappear underneath it.
+announce() {
+    printf '<6>lynux-test: %s\n' "$1" > /dev/kmsg || :
+    printf '%s\n' "$1"
+}
+test -d /sys/firmware/efi && announce 'LYNUX_FIRMWARE=UEFI' || announce 'LYNUX_FIRMWARE=BIOS'
+secure_var=/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c
+if [[ -r "$secure_var" ]]; then
+    secure=$(od -An -tu1 -j4 -N1 "$secure_var" | tr -d ' ')
+    announce "LYNUX_SECURE_BOOT=$secure"
+fi
+systemctl is-active --quiet NetworkManager
+systemctl is-active --quiet sddm
+test -s /etc/pacman.d/gnupg/pubring.gpg
+! systemctl is-failed --quiet lynux-keyring
+timeout 180 unshare --net lynux-harness doctor
+test -d /usr/share/fcitx5
+# An active display manager alone does not prove the desktop logged in.
+for _attempt in {1..90}; do
+    if pgrep -u live -x plasmashell >/dev/null && pgrep -u live -x fcitx5 >/dev/null \
+       && [[ -f "/run/user/$(id -u live)/lynux-welcome-ready" ]]; then break; fi
+    sleep 2
+done
+pgrep -u live -x plasmashell >/dev/null
+pgrep -u live -x fcitx5 >/dev/null
+test -f "/run/user/$(id -u live)/lynux-welcome-ready"
+announce 'LYNUX_BOOT_OK'

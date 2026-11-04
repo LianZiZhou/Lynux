@@ -24,6 +24,25 @@ qemu_spec.loader.exec_module(check_qemu)
 
 
 class CIRegressions(unittest.TestCase):
+    def test_markerless_kernel_uses_owned_modules_not_an_unrelated_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "usr/lib/modules/7.3.1-arm/kernel").mkdir(parents=True)
+            (root / "usr/lib/modules/unrelated").mkdir()
+            listing = "/boot/Image\n/usr/lib/modules/7.3.1-arm/kernel/fs/overlay.ko\n"
+            with patch.object(seal.subprocess, "check_output", return_value=listing):
+                self.assertEqual(seal.kernel_module_version(root, "linux-aarch64"), "7.3.1-arm")
+
+    def test_ambiguous_owned_kernel_versions_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for version in ("one", "two"):
+                (root / "usr/lib/modules" / version).mkdir(parents=True)
+            listing = "/usr/lib/modules/one/kernel/\n/usr/lib/modules/two/kernel/\n"
+            with patch.object(seal.subprocess, "check_output", return_value=listing):
+                with self.assertRaisesRegex(RuntimeError, "uniquely"):
+                    seal.kernel_module_version(root, "linux-aarch64")
+
     def test_ventoy_loader_error_fails_without_waiting_for_boot_timeout(self):
         with tempfile.TemporaryDirectory() as directory:
             iso = Path(directory) / "test.iso"

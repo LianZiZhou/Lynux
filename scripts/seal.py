@@ -8,7 +8,9 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import shutil
+import subprocess
 
 from build import command, put
 
@@ -23,6 +25,24 @@ def copy_public_certificate(source, destination):
     # unprivileged Actions uploader. Never apply this to the private key.
     shutil.copyfile(source, destination)
     destination.chmod(0o644)
+
+
+def kernel_module_version(rootfs, kernel):
+    markers = list((rootfs / "usr/lib/modules").glob("*/pkgbase"))
+    matching = [path for path in markers if path.read_text().strip() == kernel]
+    if len(matching) == 1:
+        return matching[0].parent.name
+    if matching:
+        raise RuntimeError("Cannot uniquely identify the image kernel module version")
+    # ALARM's linux-aarch64 package does not provide pkgbase. Query ownership
+    # instead of guessing a directory or using the builder host's kernel version.
+    files = subprocess.check_output(["arch-chroot", str(rootfs), "pacman", "-Qlq", kernel], text=True)
+    versions = {match[1] for line in files.splitlines()
+                if (match := re.match(r"^/usr/lib/modules/([^/]+)/", line))
+                and (rootfs / "usr/lib/modules" / match[1]).is_dir()}
+    if len(versions) != 1:
+        raise RuntimeError(f"Cannot uniquely identify modules owned by {kernel}: {sorted(versions)}")
+    return versions.pop()
 
 
 def seal(work, iso, key, cert):
@@ -46,11 +66,7 @@ def seal(work, iso, key, cert):
         while :; do sleep 3600; done
     fi
 '''
-    kernel_modules = list((rootfs / "usr/lib/modules").glob("*/pkgbase"))
-    matching = [p for p in kernel_modules if p.read_text().strip() == meta["kernel"]]
-    if len(matching) != 1:
-        raise RuntimeError("Cannot uniquely identify the image kernel module version")
-    kernel_version = matching[0].parent.name
+    kernel_version = kernel_module_version(rootfs, meta["kernel"])
     secure = work / "secure"
     secure.mkdir(exist_ok=True)
     target_hash = rootfs / "etc/lynux-rootfs.sha256"
@@ -74,6 +90,7 @@ def seal(work, iso, key, cert):
     uki = secure / "lynux.efi"
     command("ukify", "build", f"--linux={kernel}", f"--initrd={secure / 'initramfs.img'}",
             "--sign-kernel",
+            f"--uname={kernel_version}",
             f"--cmdline={meta['cmdline']}", f"--os-release=@{rootfs / 'etc/os-release'}",
             f"--stub={rootfs / 'usr/lib/systemd/boot/efi' / ('linux' + efi_arch + '.efi.stub')}",
             f"--secureboot-private-key={key}", f"--secureboot-certificate={cert}", f"--output={uki}")

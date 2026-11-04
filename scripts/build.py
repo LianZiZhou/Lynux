@@ -60,6 +60,7 @@ def prepare_profile(arch, version, profile, lockdir, test=False, template=Path("
     shutil.copytree(lockdir, shared / "lock")
     put(rootfs / "usr/local/lib/lynux/install-harnesses.py", (ROOT / "scripts/install-harnesses.py").read_text(), 0o755)
     put(rootfs / "usr/local/lib/lynux/download.py", (ROOT / "scripts/download.py").read_text(), 0o644)
+    put(rootfs / "usr/local/lib/lynux/check-kernel.py", (ROOT / "scripts/check-kernel.py").read_text())
     put(rootfs / "usr/local/lib/lynux/pacman-download", (ROOT / "scripts/pacman-download.sh").read_text(), 0o755)
     put(rootfs / "root/customize_airootfs.sh", (ROOT / "scripts/customize.sh").read_text(), 0o755)
     put(rootfs / "usr/local/lib/lynux/boot-report", (ROOT / "overlay/usr/local/lib/lynux/boot-report").read_text(), 0o755)
@@ -74,6 +75,8 @@ def prepare_profile(arch, version, profile, lockdir, test=False, template=Path("
     put(profile / f"packages.{arch}", "\n".join(packages(arch)) + "\n")
     label = "LYNUX_" + hashlib.sha256(f"{version}-{arch}".encode()).hexdigest()[:16].upper()
     modes = "'bios.syslinux' 'uefi.systemd-boot'" if arch == "x86_64" else "'uefi.systemd-boot'"
+    compression = ("'-comp' 'zstd' '-b' '1M' '-Xcompression-level' '15'" if arch == "x86_64"
+                   else "'-comp' 'xz' '-b' '1M' '-Xdict-size' '1M'")
     # Archiso releases predating the combined EFI mode use two separate mode names.
     mkarchiso = Path(shutil.which("mkarchiso")).read_text()
     if "_make_bootmode_uefi.systemd-boot()" not in mkarchiso:
@@ -92,7 +95,7 @@ buildmodes=('iso')
 bootmodes=({modes})
 pacman_conf="pacman.conf"
 airootfs_image_type="squashfs"
-airootfs_image_tool_options=('-comp' 'zstd' '-b' '1M' '-Xcompression-level' '15')
+airootfs_image_tool_options=({compression})
 file_permissions=(['/root']='0:0:700' ['/etc/sudoers.d/lynux-live']='0:0:440'
  ['/root/customize_airootfs.sh']='0:0:755' ['/usr/local/lib/lynux/boot-report']='0:0:755'
  ['/usr/local/lib/lynux/test-mode']='0:0:755' ['/usr/local/lib/lynux/pacman-download']='0:0:755'

@@ -1,5 +1,6 @@
 import importlib.util
 import base64
+import gzip
 import io
 import os
 from pathlib import Path
@@ -21,9 +22,22 @@ spec.loader.exec_module(prefetch_packages)
 qemu_spec = importlib.util.spec_from_file_location("check_qemu", ROOT / "scripts/check-qemu.py")
 check_qemu = importlib.util.module_from_spec(qemu_spec)
 qemu_spec.loader.exec_module(check_qemu)
+kernel_spec = importlib.util.spec_from_file_location("check_kernel", ROOT / "scripts/check-kernel.py")
+check_kernel = importlib.util.module_from_spec(kernel_spec)
+kernel_spec.loader.exec_module(check_kernel)
 
 
 class CIRegressions(unittest.TestCase):
+    def test_target_kernel_config_rejects_unsupported_squashfs_compression(self):
+        with tempfile.TemporaryDirectory() as directory:
+            kernel = Path(directory) / "Image"
+            config = b"CONFIG_SQUASHFS=m\nCONFIG_SQUASHFS_XZ=y\n# CONFIG_SQUASHFS_ZSTD is not set\n"
+            kernel.write_bytes(b"ARM64 kernel" + b"IKCFG_ST" + gzip.compress(config) + b"IKCFG_EDtrailing kernel data")
+            with patch("builtins.print"):
+                check_kernel.check(kernel, "xz")
+            with self.assertRaisesRegex(RuntimeError, "does not support SquashFS zstd"):
+                check_kernel.check(kernel, "zstd")
+
     def test_markerless_kernel_uses_owned_modules_not_an_unrelated_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

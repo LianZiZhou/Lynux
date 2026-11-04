@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 test -f /usr/share/lynux/.building || { echo 'This script only runs inside a staged image.' >&2; exit 1; }
+if [[ -f /usr/share/lynux/linux-aarch64.preset ]]; then
+    python /usr/local/lib/lynux/check-kernel.py /boot/Image xz
+fi
 locale-gen
 cat /usr/share/lynux/os-release > /etc/os-release
 ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime

@@ -99,7 +99,8 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, ext
                         if expect == "LYNUX_BOOT_OK":
                             time.sleep(4)  # Allow the compositor to present the first painted welcome frame.
                         break
-                    failure_message = next((message for message in abort_on if message in text), None)
+                    terminal_errors = ("Kernel panic - not syncing", "Falling back to interactive prompt", *abort_on)
+                    failure_message = next((message for message in terminal_errors if message in text), None)
                     if failure_message:
                         break
                     if process.poll() is not None:

@@ -33,6 +33,7 @@ class BuildTests(unittest.TestCase):
             self.assertNotIn("memdisk", hooks)
             self.assertNotIn("microcode", hooks)
             self.assertIn("archiso_loop_mnt lynux_ventoy", hooks)
+            self.assertIn("'-comp' 'xz'", (root / "profile/profiledef.sh").read_text())
 
     @unittest.skipIf(os.name == "nt", "Linux profile file modes and symlinks")
     def test_profile_replaces_releng_users_and_preserves_boot_configuration(self):

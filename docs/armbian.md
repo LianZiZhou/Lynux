@@ -1,17 +1,27 @@
-# Armbian 板级适配
+# Armbian boards
 
-通用 ARM64 ISO 面向具有兼容 UEFI 固件的机器。已有 Armbian 适配并不意味着仅替换 DTB 就能启动：还涉及内核配置、模块、固件、U-Boot／SPL、存储布局和启动参数。
+**English** | [中文](armbian.zh.md)
 
-复制 `config/boards/template.json` 到新文件，填写：
+The generic ARM64 ISO only boots on machines with working UEFI firmware. Most SBCs don't have that, and swapping in a DTB from Armbian isn't enough. A board also needs the right kernel config, modules, firmware, U-Boot/SPL, disk layout and boot arguments.
 
-- Armbian 仓库的完整 40 位提交、板型 ID、内核分支及 `userpatches` 目录。
-- 内核、DTB、U-Boot `.deb` 文件匹配模式；每个模式必须唯一匹配。
-- 提取产物中的内核文件名与 DTB 相对路径，以及额外固件目录。
-- 镜像容量、引导保留区域、启动分区容量。
-- 每个引导写入的 `source` 和 `offset_bytes`；source 相对 `.deb` 解包根目录。
-- 实际串口及必要的内核参数。
+So for a specific board you build a separate disk image from an Armbian board profile.
 
-使用已构建的 ARM64 rootfs 作为用户空间输入，在原生 ARM64 Linux 上执行：
+## Adding a board
+
+Copy `config/boards/template.json` to a new file and fill in:
+
+- The Armbian repo commit (full 40-character hash), board ID, kernel branch and `userpatches` directory.
+- Patterns for the kernel, DTB and U-Boot `.deb` files. Each pattern must match exactly one file.
+- The kernel file name and DTB path inside the extracted packages, plus any extra firmware directories.
+- Image size, the reserved bootloader area and the boot partition size.
+- A `source` and `offset_bytes` for every bootloader blob to write. `source` is relative to the unpacked `.deb` root.
+- The serial console and any kernel arguments the board needs.
+
+The template deliberately has no default bootloader offset. If you leave it unfilled, the build refuses to run.
+
+## Building
+
+Run this on native ARM64 Linux, using an ARM64 rootfs you've already built:
 
 ```bash
 python build board --profile config/boards/my-board.json \
@@ -19,8 +29,12 @@ python build board --profile config/boards/my-board.json \
   --work /build/my-board --out /out
 ```
 
-宿主需要 Armbian 构建依赖、Docker（若使用其容器构建）、`dpkg-deb`、parted、mkfs 工具、arch-chroot、rsync 和 xz。构建框架调用 Armbian 的 kernel/uboot 目标，只提取其包内容，不执行 Debian maintainer scripts。
+The host needs Armbian's build dependencies (and Docker if you use its container build), `dpkg-deb`, parted, mkfs tools, arch-chroot, rsync and xz. The script runs Armbian's kernel and U-Boot targets and only unpacks the resulting packages. It never runs Debian maintainer scripts.
 
-首版适配器采用 MBR、FAT 启动分区和 ext4 存储分区，以及 U-Boot extlinux 启动方式。需要 GPT、厂商分区表、FIT 或不同启动协议的设备需要扩展适配器，不能仅修改名字。模板故意不提供通用 bootloader offset；未填写的模板会直接拒绝构建。
+## Limits
 
-`verified` 默认为 false。必须记录板型、硬件修订、构建提交、启动日志、显示／输入／网络／存储测试结果后，才可将它标记为已验证。仓库目前没有声称已实机支持的板型。
+The adapter currently produces one layout: MBR, a FAT boot partition, an ext4 root partition and U-Boot extlinux. Boards that need GPT, a vendor partition table, FIT images or a different boot protocol need code changes in the adapter. Renaming things in the profile won't make them work.
+
+## Marking a board verified
+
+`verified` is false by default. Only set it to true after you've recorded the board, hardware revision, build commit, boot log and results for display, input, network and storage. No board is verified yet.

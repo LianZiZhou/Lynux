@@ -1,79 +1,82 @@
-# 验证与发布边界
+# Testing
 
-## 自动化层次
+**English** | [中文](validation.zh.md)
 
-| 检查 | 入口 | 判定依据 |
+## Automated checks
+
+| Check | Run by | Passes when |
 |---|---|---|
-| Python、shell 与单元测试 | `tests/check.sh`、ruff | 校验、锁、路径和发布失败语义 |
-| 真实加密存储 | `tests/integration_state.py` | 一次性 loop 文件上的 LUKS2、ext4、bind mounts |
-| 模型请求协议 | `scripts/check-providers.sh` | 隔离网络命名空间中的 Responses、Chat Completions、Messages 模拟服务；五套 CLI 都必须返回预期文本 |
-| BIOS／UEFI 光驱与 USB | `tests/qemu_boot.py` | 来宾启动标记、CLI 离线帮助、Plasma/Fcitx 进程 |
-| Secure Boot | `tests/image_matrix.py` | SecureBoot=1、签名负例、根文件系统损坏启动拒绝 |
-| Ventoy | `tests/ventoy_boot.py` | 一次性 Ventoy 磁盘实际启动，记录 Ventoy 版本 |
-| 发布 | `scripts/publish.py` | 报告绑定最终 ISO 摘要、双架构齐全、公开下载校验 |
+| Lint and unit tests | `tests/check.sh`, ruff | Checksums, locks, paths and release failure handling behave as expected |
+| Encrypted storage | `tests/integration_state.py` | LUKS2, ext4 and bind mounts work on throwaway loop files |
+| Model API calls | `scripts/check-providers.sh` | All five CLIs return the expected text from mock Responses, Chat Completions and Messages servers in an isolated network namespace |
+| BIOS/UEFI, CD and USB | `tests/qemu_boot.py` | The guest reports boot success, CLI help works offline, Plasma and Fcitx are running |
+| Secure Boot | `tests/image_matrix.py` | `SecureBoot=1`, bad signatures are rejected, a damaged root filesystem refuses to boot |
+| Ventoy | `tests/ventoy_boot.py` | The ISO boots from a throwaway Ventoy disk. The Ventoy version is logged |
+| Release | `scripts/publish.py` | Reports match the final ISO hash, both architectures are present, public downloads verify |
 
-QEMU 通过 `opt/lynux-test` fw_cfg 标记和 SMBIOS 产品名 `Lynux CI boot verification` 启用来宾检查，不需要修改最终 ISO 的命令行或重新签名。ARM 内核没有启用 `CONFIG_FW_CFG_SYSFS` 时使用 SMBIOS 标记。超时算失败，不算启动成功。没有 `/dev/kvm` 时使用 TCG；默认单次启动上限为 x86_64 600 秒、ARM64 1200 秒。ARM 虚拟机使用 4 个 vCPU，并给离线 CLI 检查和桌面启动留出软件模拟所需的时间；明确的内核、挂载或检查失败会立即结束测试。
+QEMU turns on the in-guest checks with an `opt/lynux-test` fw_cfg entry and the SMBIOS product name `Lynux CI boot verification`. The final ISO's command line isn't changed and nothing is re-signed. ARM kernels without `CONFIG_FW_CFG_SYSFS` rely on the SMBIOS marker.
 
-WSL 默认使用 TCG，避免把设备节点存在误认为嵌套虚拟化已验证；已确认可用的环境可用 `LYNUX_QEMU_ACCEL=kvm` 显式覆盖。
+A timeout counts as a failure. Without `/dev/kvm` the tests use TCG emulation, with a per-boot limit of 600 seconds on x86_64 and 1200 seconds on ARM64. ARM VMs get 4 vCPUs and extra time for the offline CLI checks and desktop startup under emulation. A clear kernel, mount or check failure ends the test right away.
 
-ARM 的仓库版 EDK2 固件默认未声明 Secure Boot 支持；CI 用锁定的 EDK2 stable 提交编译启用 Secure Boot 的 ArmVirt 测试固件。该固件仅用于 QEMU 验证，不作为所有物理 ARM 设备的固件发布。
+WSL uses TCG by default, because `/dev/kvm` existing doesn't prove nested virtualization works. If you know KVM works there, set `LYNUX_QEMU_ACCEL=kvm`.
 
-## 首次发行及桌面变更的人工验收
+The EDK2 firmware in Arch's ARM repo doesn't support Secure Boot. CI builds an ArmVirt test firmware with Secure Boot from a pinned EDK2 stable commit. That firmware is only for QEMU tests. We don't ship it as firmware for physical ARM devices.
 
-自动进程检查不能替代以下交互验收：
+## Manual checks before a first release or desktop change
 
-1. Konsole、Qt 编辑器、Firefox 内实际输入简体拼音、台湾注音、香港仓颉／速成／粤拼和日语，检查候选窗、文字提交及切换。
-2. 五套 CLI 的交互初始化及真实账号登录；CI 使用模拟服务，不访问真实模型账号。输出中的成本字段是客户端按模拟 token 计算的估值，不是实际消费。
-3. 欢迎窗口完成 ISO 选择、只读挂载、创建／解锁容器、工作区编辑和重启恢复。
-4. 在一次性目标磁盘完成 Arch 示例安装、chroot 和引导修复，记录目标磁盘；不在开发机系统盘执行。
-5. 两种架构的物理 UEFI 机器验证证书未信任拒绝、导入后启动、改动 UKI 拒绝，以及显示、Wi-Fi 和输入设备。
-6. 异常断电、满盘、介质拔出、跨周升级和不同架构访问共享工作区的恢复表现。
+Automated process checks don't replace these:
 
-报告应注明版本、ISO SHA-256、环境和实际步骤。源码仓库未附带这些实机验收结果，不能将自动化测试通过宣传为所有硬件都兼容。
+1. Type Simplified Pinyin, Taiwan Zhuyin, Hong Kong Cangjie/Quick/Jyutping and Japanese in Konsole, a Qt editor and Firefox. Check the candidate window, committing text and switching between methods.
+2. Set up each of the five CLIs and log in with a real account. CI only talks to mock servers. Any cost it prints is the client's estimate for mock tokens, not real spending.
+3. In the welcome window: pick an ISO, mount it read-only, create and unlock a container, edit the workspace, reboot and check it's all still there.
+4. On a throwaway target disk, do an example Arch install, chroot in and repair the bootloader. Write down which disk you used. Never do this on your development machine's system disk.
+5. On physical UEFI machines of both architectures: untrusted certificate is refused, boot works after importing it, a modified UKI is refused, and display, Wi-Fi and input devices work.
+6. Recovery after power loss, a full disk, pulling the drive, upgrading across weekly releases, and opening the shared workspace from the other architecture.
 
-## 本次开发环境
+Each report should list the version, ISO SHA-256, environment and the steps you took. The repo doesn't contain any hardware test results yet, so passing CI doesn't mean Lynux works on all hardware.
 
-Windows + WSL2 x86_64；使用隔离 Arch 容器构建，在 QEMU 中验证。
+## Results so far
 
-### 2026-11-04 本地验收记录
+Development setup: Windows + WSL2 on x86_64, builds in an isolated Arch container, tests in QEMU.
 
-候选版本：`2026.11.03.local7`（版本日期沿用开始构建的日期）。签名 ISO 为
-`lynux-2026.11.03.local7-x86_64-signed.iso`，使用临时测试证书。
+### 2026-11-04: local x86_64 test build
 
-已执行并通过：
+Version `2026.11.03.local7` (named after the day the build started). Signed ISO `lynux-2026.11.03.local7-x86_64-signed.iso`, with a temporary test certificate.
 
-- 32 项单元测试、Python 静态检查、ShellCheck、GitHub Actions actionlint。
-- 真实 LUKS2/ext4/loop/bind-mount 测试，包括错误密码、重新解锁、格式拒绝和临时明文清理。
-- 五套 CLI 的离线帮助／版本检查，以及隔离网络中的模拟模型请求；没有使用真实模型账号。
-- x86_64 BIOS 光驱／模拟 USB 启动；UEFI Secure Boot 光驱／模拟 USB 启动，来宾报告 SecureBoot=1。
-- Ventoy 1.1.18 普通 UEFI 启动，ISO 放在包含空格和中文的多级目录中。
-- 错误证书与修改后的 UKI 被签名检查拒绝；被改动的 rootfs 在启动时拒绝挂载。
-- 输入法预配置所用的引擎 ID 均对应镜像内实际安装的配置文件；欢迎窗口在真实来宾桌面完成绘制。
+Passed:
 
-ISO SHA-256：`9251571949ca24d3857dd868e8441bd18bd0ed62b75bfcdadd35b760f8e1dd36`。
-逐项报告和截图保存在本地 `out/`；报告绑定最终 ISO/rootfs 摘要。
+- 32 unit tests, Python lint, ShellCheck and actionlint.
+- Real LUKS2/ext4/loop/bind-mount tests, including wrong password, re-unlock, format rejection and cleanup of temporary plaintext.
+- Offline help and version checks for all five CLIs, plus mock model requests on an isolated network. No real accounts were used.
+- x86_64 BIOS boot from CD and emulated USB. UEFI Secure Boot from CD and emulated USB, with the guest reporting `SecureBoot=1`.
+- Plain UEFI boot from Ventoy 1.1.18, with the ISO in nested folders whose names contain spaces and Chinese characters.
+- Wrong certificate and modified UKI rejected by signature checks. Modified rootfs refused at boot.
+- Every input method ID in the preset config matches an engine installed in the image. The welcome window drew correctly on a real guest desktop.
 
-上述本地验收阶段尚未完成 ARM64 自动化启动验证和正式发布；这两项已在后续双架构 CI 中完成，见下方记录。具体 Armbian 板型实机验证、真实账号登录、四类输入法在所有目标应用中的逐项实操，以及目标发行版完整安装验收仍待人工完成。
+ISO SHA-256: `9251571949ca24d3857dd868e8441bd18bd0ed62b75bfcdadd35b760f8e1dd36`. Per-test reports and screenshots are in the local `out/` folder, tied to the final ISO and rootfs hashes.
 
-### 2026-11-04 GitHub runner 复验
+ARM64 boot tests and a real release weren't done at this stage. Both were done later in CI (see below).
 
-候选版本 `2026.11.04.5.1` 使用长期正式证书，x86_64 ISO SHA-256 为
-`8eaf26e840253b4d2b3ac515bba69514c84356bc2e82125b28beee95826148da`。
+### 2026-11-04: re-test on GitHub runners
 
-- [直接启动复验](https://github.com/LianZiZhou/Lynux/actions/runs/41775115851)中的 BIOS 光驱／USB、UEFI Secure Boot 光驱／USB，以及损坏根文件系统拒绝启动报告全部通过；该次运行的 Ventoy 项失败，整体运行未通过。
-- 修正测试介质写入后，[Ventoy 单项复验](https://github.com/LianZiZhou/Lynux/actions/runs/41783213425)通过。使用 Ventoy 1.1.18、包含中文和空格的 ISO 路径；EFI 分区与官方原始镜像一致，来宾返回 `LYNUX_BOOT_OK`。
+Version `2026.11.04.5.1`, signed with the long-term certificate. x86_64 ISO SHA-256: `8eaf26e840253b4d2b3ac515bba69514c84356bc2e82125b28beee95826148da`.
 
-这两轮使用同一个 ISO，仅重验测试工具与介质制作过程；不等于双架构正式发布已完成。
+- [Direct boot re-test](https://github.com/LianZiZhou/Lynux/actions/runs/41775115851): BIOS CD/USB, UEFI Secure Boot CD/USB and the damaged-rootfs check all passed. The Ventoy test failed in this run, so the run as a whole failed.
+- After fixing how the test drive was written, the [Ventoy-only re-test](https://github.com/LianZiZhou/Lynux/actions/runs/41783213425) passed. It used Ventoy 1.1.18 and an ISO path with spaces and Chinese characters. The EFI partition matched the official image byte for byte, and the guest returned `LYNUX_BOOT_OK`.
 
-### 2026-11-04 双架构正式发布
+Both runs used the same ISO. Only the test tools and drive setup changed. This wasn't a release.
 
-[完整流水线](https://github.com/LianZiZhou/Lynux/actions/runs/41804923096)已通过，发布版本为 [2026.11.04.13.1](https://github.com/LianZiZhou/Lynux/releases/tag/v2026.11.04.13.1)。两种架构均完成签名、来宾 CLI 离线检查、模拟模型请求、UEFI 光驱／USB Secure Boot 启动、完整性负例以及 Ventoy 普通 UEFI 启动；x86_64 另完成 BIOS 光驱／USB 启动。
+### 2026-11-04: first dual-architecture release
 
-| 架构 | 正式 ISO SHA-256 |
+The [full pipeline](https://github.com/LianZiZhou/Lynux/actions/runs/41804923096) passed and published [2026.11.04.13.1](https://github.com/LianZiZhou/Lynux/releases/tag/v2026.11.04.13.1). Both architectures passed signing, offline CLI checks in the guest, mock model requests, UEFI Secure Boot from CD and USB, the tamper tests and plain UEFI boot from Ventoy. x86_64 also passed BIOS boot from CD and USB.
+
+| Arch | Release ISO SHA-256 |
 |---|---|
 | x86_64 | `ceef499ffe920f48a62c36fc1919f836fdc3302f6440cd123cc83b092d837068` |
 | aarch64 | `6944c35ae798b51cd26baa294edb2b132ea88697f655fe0d5bbd363d4f9ecbda` |
 
-完整 ISO 已上传至 S3，并通过公开 HTTPS 下载摘要校验；[最新版本索引](https://lynux.lzz.moe/lynux/latest.json)已更新。发布使用长期证书，指纹见 `docs/keys/README.md`。
+Both ISOs are on S3, and their hashes were checked after downloading them back over public HTTPS. The [latest index](https://lynux.lzz.moe/lynux/latest.json) is updated. The release is signed with the long-term certificate. Its fingerprint is in [docs/keys](keys/README.md).
 
-ARM GitHub runner 使用 TCG 软件模拟，三个成功的完整启动用例各约 9 分钟；该时间不代表物理 ARM 设备的启动速度。上述结果限于记录的 QEMU 环境，不能替代前述实机和交互验收。
+The ARM GitHub runner uses TCG emulation, so each of the three full boot tests took about 9 minutes. Real ARM hardware will be faster.
+
+Still not done: testing on real Armbian boards, logging in with real accounts, trying every input method in every target app, and full installs of other distros. These are QEMU results only and don't replace the manual checks above.

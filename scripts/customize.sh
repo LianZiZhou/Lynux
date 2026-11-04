@@ -6,7 +6,7 @@ if [[ -f /usr/share/lynux/linux-aarch64.preset ]]; then
 fi
 locale-gen
 cat /usr/share/lynux/os-release > /etc/os-release
-ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+ln -sf /usr/share/zoneinfo/UTC /etc/localtime
 id live >/dev/null 2>&1 || useradd --create-home --groups wheel,audio,video,input --shell /bin/bash live
 passwd -d live
 passwd -l root

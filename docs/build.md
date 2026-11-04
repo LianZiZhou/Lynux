@@ -1,107 +1,133 @@
-# 构建与发布
+# Building and releasing
 
-## 构建输入
+**English** | [中文](build.zh.md)
 
-`scripts/resolve.py` 在一个任务中解析五套工具，生成共享的 `manifest.json`、每套 npm 工具的传递依赖锁和 archiso 的精确源码提交。Claude 使用官方签名 manifest，核对发行密钥指纹后记录两个平台的原生二进制摘要。
+## Inputs
 
-锁目录是一次构建的输入，不复用旧 `latest` 缓存；重新解析时使用新目录。npm 的锁定 tarball 先由 aria2 并发下载，按 integrity 校验并导入 npm 缓存，再使用 `npm ci --offline`，启用 engine 检查和平台可选依赖，安装后验证版本与帮助命令。上游删除资产或发生不兼容时构建失败，不跳过工具。
+`scripts/resolve.py` resolves all five CLIs in one go. It writes a shared `manifest.json`, a full npm dependency lock for each npm-based tool, and the exact archiso commit. For Claude it uses the official signed manifest. It checks the release key fingerprint and records the native binary hashes for both platforms.
 
-## 下载加速
+The lock directory is the input for one build. It never reuses an old `latest` cache, so re-resolve into a new directory. npm tarballs are downloaded in parallel with aria2, checked against their integrity hashes and loaded into the npm cache. Then `npm ci --offline` installs them with engine checks and platform-specific optional dependencies, and each tool's version and help output are checked. If upstream removes a file or breaks compatibility, the build fails. It doesn't skip the tool.
 
-通用下载入口为 `scripts/download.py`，默认每文件 16 个连接、8 个文件并发、1 MiB 最小分块，启用断点续传及 TLS 校验，不开放 aria2 RPC。可通过 `LYNUX_DOWNLOAD_CONNECTIONS`（1–16）和 `LYNUX_DOWNLOAD_JOBS`（1–32）调整。服务器不支持 Range 时连接数可能自动减少。
+archiso's `customize_airootfs.sh` hook is marked deprecated upstream. The exact upstream commit is pinned in the lock. If upstream removes the hook, the build fails and the integration has to be updated. An un-customized image is never published.
 
-pacman 使用 aria2 的 XferCommand；镜像构建还会先解析完整软件包清单，以 8 文件并发方式预取到包缓存，随后仍由 pacman 校验软件包签名。CLI 原生二进制、npm 锁定 tarball、ARM rootfs、Ventoy 和发布后回读校验均使用 aria2。小型元数据也经同一入口，但每次新建临时文件，防止续传到更新后的 `latest` 内容。
+## Downloads
 
-Claude 优先使用 Anthropic 官方 npm 平台包提供的原生二进制，解包后必须匹配已验签 manifest 中的 SHA-256；它仍是官方原生版本。npm 平台包尚未发布时使用 manifest 对应的官方下载地址。
+All downloads go through `scripts/download.py`. By default that's 16 connections per file, 8 files at once and 1 MiB minimum chunks, with resume and TLS verification on. aria2 RPC is never opened. Tune it with `LYNUX_DOWNLOAD_CONNECTIONS` (1–16) and `LYNUX_DOWNLOAD_JOBS` (1–32). Servers without Range support may get fewer connections.
 
-CI 的 Python 工具也先用 pip 解析 wheel 清单，再用 aria2 下载并校验，最后离线安装。初次安装 aria2 自身仍需宿主包管理器；Git、Docker 镜像、Actions artifacts 及 npm/pip 的依赖解析使用各自协议客户端。不会为加速关闭摘要、包签名或 TLS 校验。S3 上传继续使用 SDK 的分段上传。
+- **pacman** uses aria2 as its XferCommand. Before building, the full package list is resolved and prefetched into the package cache 8 files at a time. pacman still checks every package signature. The prefetch also saves package signatures from the repo database. If a package has no embedded signature, aria2 fetches the detached ones. Installs use the database snapshot from this run, so a rolling mirror update can't change versions halfway through.
+- **CLI binaries, npm tarballs, the ARM rootfs, Ventoy and post-release checks** all use aria2. Small metadata files go through the same path, but always into a fresh temp file, so a resume can't splice together old and new `latest` content.
+- **Claude** comes from Anthropic's official npm platform packages. The unpacked binary must match the SHA-256 in the verified manifest, so it's the same official native build. If the npm platform package isn't out yet, it falls back to the official download URL from the manifest.
+- **CI Python tools**: pip resolves the wheel list, aria2 downloads and checks the wheels, then they're installed offline.
 
-x86_64 使用 Arch 官方容器作为构建宿主；ARM64 从清华 TUNA HTTPS 镜像获取 Arch Linux ARM rootfs 并记录 SHA-256，目标包仍通过 pacman 签名校验。原 GeoIP 镜像域名的 HTTPS 证书在开发环境中未能通过检查，因此使用可验证的 HTTPS 镜像，不关闭 TLS 或包签名校验。`ALARM_ROOTFS_URL` 可覆盖引导包地址。引导 rootfs 的摘要是下载记录，不声称它是上游签名认证；也可使用已经验证的原生 Arch Linux ARM 宿主。
+Not via aria2: installing aria2 itself (that needs the host package manager), Git, Docker images, Actions artifacts and npm/pip dependency resolution. S3 uploads use the SDK's multipart upload. Speed-ups never turn off hashes, package signatures or TLS checks.
 
-archiso 的 `customize_airootfs.sh` 接口当前被上游标记为 deprecated。这里将上游精确提交锁在清单中；如果上游移除此接口，构建必须失败并更新集成，不能发布未定制的镜像。
+Timeouts: 300 seconds per pacman package, 60 seconds per signature, 900 seconds for other single files and 1200 seconds for batches. A timeout fails the build. Unverified files are never accepted.
 
-## 本地流程
+x86_64 builds run in Arch's official container. ARM64 gets its Arch Linux ARM rootfs from the Tsinghua TUNA HTTPS mirror and records its SHA-256. Packages installed into the image are still checked by pacman. The GeoIP mirror's HTTPS certificate failed verification in our dev setup, so we use a mirror that passes instead of turning TLS off. Override the bootstrap URL with `ALARM_ROOTFS_URL`. The recorded rootfs hash only shows what was downloaded. It isn't an upstream signature. You can also build on a verified native Arch Linux ARM host.
 
-1. 解析共享依赖锁。
-2. 在原生架构的特权 Arch 容器执行 `python /src/build iso --arch x86_64 --lock /src/work/lock --work /build/image --out /out`。
-3. 在同一构建 volume 中使用 `scripts/seal.py`，传入 build 工作目录、unsigned ISO、外部私钥和证书。
-4. 使用 `tests/image_matrix.py` 检查最终 signed ISO，再运行 `tests/ventoy_boot.py`。
-5. 汇集两种架构的 signed ISO、清单、证书及测试报告，先运行 `scripts/publish.py --dry-run` 检查发布条件。
+## Building locally
 
-私钥目录应另行只读挂载，不能复制到 profile 或 rootfs。`seal.py` 的例子：
+1. Resolve the shared dependency lock.
+2. In a privileged Arch container on the native architecture, run `python /src/build iso --arch x86_64 --lock /src/work/lock --work /build/image --out /out`.
+3. In the same build volume, run `scripts/seal.py` with the build work directory, the unsigned ISO, and your private key and certificate.
+4. Test the signed ISO with `tests/image_matrix.py`, then `tests/ventoy_boot.py`.
+5. Gather both architectures' signed ISOs, manifests, certificates and test reports, then run `scripts/publish.py --dry-run` to check everything is in place.
+
+Mount the private key directory separately and read-only. Never copy it into the profile or rootfs. Example:
 
 ```bash
 python scripts/seal.py --work /build/image \
   --iso /out/lynux-2026.11.03.local-x86_64.iso --key /keys/db.key --cert /keys/db.crt
 ```
 
-`build iso` 不自动覆盖已有工作目录。旧工作目录保留用于诊断；重新构建使用新路径。
+`build iso` won't overwrite an existing work directory. Old ones are kept for debugging, so use a new path for each build.
 
-模型请求检查可在构建容器内执行 `bash /src/scripts/check-providers.sh x86_64 /build/image /out`。它为五套 CLI 创建临时配置，隔离到只有 loopback 的网络命名空间，对本地模拟服务发送请求，并将结果绑定到 rootfs 摘要；不需要真实模型账号。
+To test the CLIs' model requests, run `bash /src/scripts/check-providers.sh x86_64 /build/image /out` inside the build container. It gives each CLI a temporary config, isolates them in a loopback-only network namespace, sends requests to local mock servers and ties the results to the rootfs hash. You don't need real model accounts.
 
-## GitHub 配置
+Build speed:
 
-创建三个 GitHub Environments：
+- The build profile points pacstrap at the same cache the prefetch filled, so packages aren't downloaded twice. Build-tool dependencies are prefetched the same way.
+- The ARM test firmware is built in its own step and cached by the pinned EDK2 commit and build script. On restore the commit and file hashes are checked. No keys or CLI logins are ever cached.
+- x86_64 compresses the read-only system with Zstd level 15 and 1 MiB blocks, which builds and boots faster. ARM64 uses XZ with a 1 MiB dictionary, because that's the SquashFS decompressor the Arch Linux ARM kernel has. The build checks the target kernel's config for this. Zstd support in the initramfs doesn't mean SquashFS supports it too. Zstd images are usually bigger than XZ ones. The full ISO is published on S3, and each release's manifest has the actual size.
 
-- `Main`：仅供发布任务使用。Deployment branches and tags 选择 **Selected branches and tags**，仅添加类型为 **Branch**、名称为 `main` 的规则，不添加 tag 或通配符规则；关闭 **Allow administrators to bypass configured protection rules**。
-- `Signing`：构建正式签名镜像使用，与 `Main` 相同的分支限制和禁止绕过设置，不保存 S3 凭据。
-- `Testing`：测试构建使用，允许各分支，**不保存任何 secrets**。
+## GitHub setup
 
-无需设置 Required reviewers 或 Wait timer，周更可以自动运行。工作流只在 `refs/heads/main` 的定时任务或 `publish=true` 的手动任务中进入正式签名和发布流程。其他分支手动指定 `publish=true` 仍只生成临时签名的测试产物，发布任务跳过。
+### Environments
 
-S3 密钥必须仅存放在 **Main → Environment secrets**。不要另存为 Repository secrets，也不要通过 Organization secrets 授予此仓库访问；否则其他分支的工作流仍可直接引用这些副本。单独的工作流 `if` 条件不能替代 GitHub 的环境分支保护。普通 PR 的源代码检查不引用任何环境。不要新增将不可信 PR 代码带入 `Main` 的 `pull_request_target` 等工作流；能修改环境规则或主分支工作流的管理员仍属于信任边界。
+Create three GitHub Environments:
 
-`Main → Environment variables`：
+- `Main`: used only by the release job. Under Deployment branches and tags pick **Selected branches and tags** and add one rule of type **Branch** named `main`. Add no tag or wildcard rules. Turn off **Allow administrators to bypass configured protection rules**.
+- `Signing`: used to build images signed with the real key. Same branch rule and no-bypass setting as `Main`. No S3 credentials here.
+- `Testing`: used for test builds. Any branch is allowed. **Don't put any secrets here.**
 
-| 名称 | 用途 |
+You don't need required reviewers or a wait timer, so the weekly build can run on its own. Real signing and publishing only happen for scheduled runs on `refs/heads/main`, or manual runs on `main` with `publish=true`. On any other branch, `publish=true` still only produces a test build with a throwaway certificate, and the release job is skipped.
+
+Keep the S3 keys **only** in **Main → Environment secrets**. Don't also add them as repository secrets or share them through organization secrets. If you do, workflows on other branches can read those copies. A workflow `if` condition doesn't replace environment branch protection. PR checks don't use any environment. Don't add `pull_request_target` or similar workflows that would run untrusted PR code in `Main`. Anyone who can change environment rules or workflows on `main` is inside the trust boundary anyway.
+
+### Variables and secrets
+
+`Main → Environment variables`:
+
+| Name | Purpose |
 |---|---|
 | `S3_ENDPOINT` | HTTPS S3 API endpoint |
-| `S3_REGION` | AWS region；R2 可用 `auto` |
-| `S3_BUCKET` | 已创建的 bucket |
-| `S3_PREFIX` | 对象前缀，建议 `lynux` |
-| `DOWNLOAD_BASE_URL` | 对应 bucket 根路径的公开 HTTPS 下载域名，不包含前缀 |
+| `S3_REGION` | AWS region. Use `auto` for R2 |
+| `S3_BUCKET` | An existing bucket |
+| `S3_PREFIX` | Object prefix. `lynux` is a good default |
+| `DOWNLOAD_BASE_URL` | Public HTTPS URL for the bucket root, without the prefix |
 
-`Settings → Secrets and variables → Actions → Variables`（仓库级）：
+`Settings → Secrets and variables → Actions → Variables` (repository level):
 
-| 名称 | 用途 |
+| Name | Purpose |
 |---|---|
-| `X86_RUNNER` / `ARM_RUNNER` | 可选的 runner 标签覆盖；分别需要原生 x86_64 / ARM64、特权 Docker |
-| `DOWNLOAD_CONNECTIONS` / `DOWNLOAD_JOBS` | aria2 每文件连接数／并发文件数，默认 16／8 |
+| `X86_RUNNER` / `ARM_RUNNER` | Optional runner label overrides. Each needs native x86_64 / ARM64 and privileged Docker |
+| `DOWNLOAD_CONNECTIONS` / `DOWNLOAD_JOBS` | aria2 connections per file / files at once. Defaults 16 / 8 |
 
-Environment secrets（均不放在仓库级）：
+Environment secrets (never at repository level):
 
-| 环境 | 名称 | 用途 |
+| Environment | Name | Purpose |
 |---|---|---|
-| `Main` | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | 仅限发布 bucket 的上传权限 |
-| `Main` 和 `Signing` | `SECURE_BOOT_KEY_B64` | 同一 PEM 私钥的 base64 编码；分别签名发布清单和镜像 |
-| `Signing` | `SECURE_BOOT_CERT_B64` | 对应 PEM X.509 证书的 base64 编码 |
+| `Main` | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | Upload access to the release bucket only |
+| `Main` and `Signing` | `SECURE_BOOT_KEY_B64` | Base64 of the same PEM private key. Signs the release manifest in `Main` and the images in `Signing` |
+| `Signing` | `SECURE_BOOT_CERT_B64` | Base64 of the matching PEM X.509 certificate |
 
-下载域名需要真实公开读取权限和正确的内容服务；脚本不创建 bucket、不修改公开策略、不部署 DNS。S3 服务必须支持条件创建 `If-None-Match: *`，用于防止同名版本被覆盖。
+The download domain must really serve the bucket publicly. The scripts don't create buckets, change access policies or set up DNS. The S3 service must support conditional writes with `If-None-Match: *`, which stops a version from being overwritten.
 
-PR 只执行源代码及一次性存储测试，不运行带发布凭据的任务。主分支的定时发布或 `publish=true` 缺少长期密钥时失败。手动 `publish=false` 使用临时证书，仅保留运行日志与摘要，不保留 ISO 或诊断 Artifacts；需要保存测试镜像时请在本地构建。
+### What each kind of run does
 
-Actions Artifacts 只用于周更流水线内部传递依赖锁和正式发布所需的镜像、报告。`Delete CI artifacts` 在现有工作流结束后自动清理，成功、失败、取消均适用；每小时还会扫描所有已完成运行作为兜底，跳过仍在运行的任务。上传时的 1 天保留期仅是自动清理服务异常时的最后保障，不代表正常保留一天。清理工作流不执行触发分支的代码，也不访问 S3 凭据。S3 镜像、GitHub Release 附件、Actions 日志和构建缓存不属于本次 Artifacts 清理范围。
+- **PRs** run source checks and throwaway storage tests only. Nothing with release credentials.
+- **Scheduled runs, or `publish=true` on `main`** fail if the long-term keys are missing.
+- **Manual runs with `publish=false`** use a throwaway certificate and keep only logs and the run summary. No ISO or diagnostics are kept as Artifacts. If you want to keep a test image, build it locally.
 
-流程结束后中间产物已删除，重新构建请新建一次完整的手动运行，不要依赖旧 Artifacts 只重跑失败的 job。
+GitHub-hosted runners first delete the preinstalled Android, .NET and GHC SDKs and the hosted tool cache to free space. If the 35 GiB check still fails, use a runner with more disk. This cleanup only runs on `github-hosted` runners and never touches self-hosted ones.
 
-GitHub 临时托管 runner 会先清理预装的 Android、.NET、GHC 和 hosted tool cache 以释放空间；35 GiB 预检仍失败时请配置有足够空间的 runner。这一步只在 `github-hosted` 执行，不清理自托管 runner 上的工具或项目。
+Image, firmware and boot-test steps log processes, CPU, memory, disk use and log size every minute. Setup, ARM firmware and image builds time out after 20, 35 and 60 minutes. When QEMU fails, the exit code and the end of its log are printed right away.
 
-构建 profile 显式指定与预下载相同的 pacman 缓存，避免 aria2 预下载后 pacstrap 又重新下载。ARM 的测试固件作为独立步骤编译，按锁定的 EDK2 提交和编译脚本缓存；恢复时核对提交及文件摘要，不缓存私钥或 CLI 凭据。
+### Actions Artifacts
 
-预下载同时保存仓库数据库中的包签名；未内嵌签名时以 aria2 批量获取 detached signatures，最终仍由 pacman 验证。安装阶段固定使用本轮解析的数据库快照，避免滚动镜像更新导致缓存版本漂移。pacman 单次包传输默认最多 300 秒、签名最多 60 秒，其他单文件下载默认 900 秒，批量下载默认 1200 秒；超时会失败，不接受未验证文件。
+Artifacts are only used inside the weekly pipeline, to pass the dependency lock and the release images and reports between jobs. Failed runs and test builds upload no diagnostics. Verification reports from a successful release are saved with the Release and on S3.
 
-x86_64 只读系统使用 Zstd level 15、1 MiB 块压缩，以减少每轮构建和启动解压时间。ARM64 使用 XZ（1 MiB 字典），匹配 Arch Linux ARM 内核启用的 SquashFS 解压器；构建时检查目标内核的嵌入配置，不能把 initramfs 支持 Zstd 误认为 SquashFS 也支持。Zstd 通常比 XZ 生成更大的镜像；完整 ISO 通过 S3 发布，大小以当轮清单为准。构建工具依赖也先批量预下载，再交给 pacman 验签安装。
+The `Delete CI artifacts` workflow deletes them as soon as each workflow finishes, whether it passed, failed or was cancelled. It also sweeps all finished runs every hour as a backup, and skips runs still in progress. The 1-day retention set at upload is only a last resort in case cleanup breaks. It doesn't mean files normally stay for a day. The cleanup workflow never runs code from the triggering branch and has no S3 access. It doesn't touch S3 images, Release files, Actions logs or build caches.
 
-镜像、固件及启动测试阶段每分钟记录实际进程、CPU、内存、磁盘使用和日志字节数。环境准备、ARM 固件和镜像构建分别设有 20、35、60 分钟超时。QEMU 失败时直接打印退出码和日志尾部；失败或测试构建不上传诊断 Artifacts。正式发布成功后的验证报告随 Release/S3 保存。
+Since intermediate files are gone once a run ends, start a new full manual run to rebuild. Don't try to re-run just the failed job.
 
-测试工具显式安装 `qemu-hw-display-virtio-gpu` 和 `qemu-hw-display-virtio-gpu-pci`，x86 另安装 `qemu-hw-display-virtio-vga`，并在构建镜像前初始化设备自检；不能只安装 PCI 包并假设它会自动带入基础模块。x86 使用单个 VGA 兼容的 virtio 显卡，ARM 使用 virtio PCI 显卡。可手动运行 `Verify existing image` 工作流，输入已发布的 Release tag 并选择架构，从 Release/S3 经 aria2 下载 ISO、证书和依赖锁，验证已登记证书、清单签名及文件摘要后重验；可选择仅复验 Ventoy。该流程不依赖历史 Artifacts，不使用签名私钥，不上传 S3 或发布 Release；结果写入日志和运行摘要。调试任务在 QEMU 段错误时记录限时 GDB 回溯，崩溃和来宾启动失败都仍然阻止测试通过。
+## QEMU and Ventoy tests
 
-Ventoy 测试只写新建的临时磁盘文件。夹具安装器的管道 `dd` 使用 `iflag=fullblock`，避免短读使 EFI 分区被截断；安装后逐字节对照官方压缩包中的原始 EFI 镜像，并校验复制到数据分区的 ISO 摘要。介质制作失败与来宾启动失败分别报告，不能用损坏的测试 U 盘推断 ISO 不兼容。
+The test tools explicitly install `qemu-hw-display-virtio-gpu` and `qemu-hw-display-virtio-gpu-pci`, plus `qemu-hw-display-virtio-vga` on x86. A device self-check runs before the image build. Don't install only the PCI package and expect it to pull in the base module. x86 uses a single VGA-compatible virtio GPU, ARM uses a virtio PCI GPU.
 
-## 发布事务
+To re-test a published image, run the `Verify existing image` workflow by hand. Give it a release tag and pick an architecture. It downloads the ISO, certificate and dependency lock from the Release/S3 with aria2, checks the certificate against the ones in this repo, verifies the manifest signature and file hashes, then re-runs the tests. You can choose to re-test only Ventoy. It doesn't use old Artifacts or the signing key, and it doesn't upload or publish anything. Results go to the log and the run summary. In debug runs, a QEMU segfault captures a time-limited GDB backtrace. Crashes and guest boot failures still fail the test.
 
-两个架构成功后，发布任务验证最终 ISO 与启动报告的摘要绑定、五套 CLI 版本一致，以及 BIOS、Ventoy 和签名完整性测试结果。先用条件写入占用独立版本目录，再上传并通过公开 HTTPS 逐个下载校验，然后创建 GitHub Release，最后更新 `latest.json`。
+The Ventoy test only writes to fresh temporary disk files. The fixture installer's `dd` pipe uses `iflag=fullblock` so a short read can't truncate the EFI partition. After install, the EFI image is compared byte for byte against the one in the official archive, and the ISO copied to the data partition is hash-checked. Drive setup failures and guest boot failures are reported separately, so a broken test drive can't be mistaken for an incompatible ISO.
 
-失败的版本目录保留诊断，重跑使用新的 run-attempt 版本号；不会覆盖原目录。若 Release 成功但 latest 更新失败，旧 latest 仍可用，日志会明确失败。历史版本不自动删除。
+## How a release is published
 
-镜像是滚动快照，清单可追踪版本，但不承诺未来能够从已变化的上游仓库逐字节重建。若要长期可重建，需另行归档软件包仓库和全部下载资产。
+Once both architectures pass, the release job checks that the boot reports are tied to the final ISO hashes, that all five CLI versions match across architectures, and that the BIOS, Ventoy and signing tests passed. Then it:
+
+1. Claims a new version directory on S3 with a conditional write.
+2. Uploads everything and downloads each file back over public HTTPS to check it.
+3. Creates the GitHub Release.
+4. Updates `latest.json`.
+
+A failed version directory is kept for debugging. A re-run gets a new version number from the run attempt and never overwrites the old directory. If the Release is created but updating `latest` fails, the old `latest` still works and the log shows the failure. Old versions are never deleted automatically.
+
+Each image is a snapshot of rolling repos. The manifest tells you exactly what went in, but rebuilding it byte for byte later won't work once upstream has moved on. For that you'd need to archive the package repos and every downloaded file yourself.

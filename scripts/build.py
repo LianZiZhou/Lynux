@@ -102,7 +102,15 @@ file_permissions=(['/root']='0:0:700' ['/etc/sudoers.d/lynux-live']='0:0:440'
  ['/usr/local/bin/lynux-browser']='0:0:755')
 ''')
     kernel = "linux" if arch == "x86_64" else "linux-aarch64"
-    put(rootfs / "etc/mkinitcpio.conf", 'MODULES=(loop squashfs overlay dm_mod dm_crypt)\nBINARIES=()\nFILES=()\nHOOKS=(base udev microcode modconf kms memdisk archiso archiso_loop_mnt lynux_ventoy block filesystems keyboard shutdown)\nCOMPRESSION="zstd"\n')
+    hooks = ["base", "udev"]
+    if arch == "x86_64":
+        hooks.append("microcode")
+    hooks += ["modconf", "kms"]
+    if arch == "x86_64":
+        hooks.append("memdisk")  # Requires x86-only syslinux's memdiskfind.
+    hooks += ["archiso", "archiso_loop_mnt", "lynux_ventoy", "block", "filesystems", "keyboard", "shutdown"]
+    put(rootfs / "etc/mkinitcpio.conf", 'MODULES=(loop squashfs overlay dm_mod dm_crypt)\nBINARIES=()\nFILES=()\n'
+        + f'HOOKS=({" ".join(hooks)})\nCOMPRESSION="zstd"\n')
     # Explicit presets also normalize Arch Linux ARM's Image/initramfs naming for archiso.
     # ALARM's kernel package owns its preset, so stage the override elsewhere
     # until customize_airootfs.sh runs after the package transaction.

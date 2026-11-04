@@ -29,6 +29,10 @@ class BuildTests(unittest.TestCase):
             preset = (staged / "usr/share/lynux/linux-aarch64.preset").read_text()
             self.assertNotIn('ALL_kver', preset)
             self.assertIn('/boot/initramfs-linux-aarch64.img', preset)
+            hooks = (staged / "etc/mkinitcpio.conf").read_text()
+            self.assertNotIn("memdisk", hooks)
+            self.assertNotIn("microcode", hooks)
+            self.assertIn("archiso_loop_mnt lynux_ventoy", hooks)
 
     @unittest.skipIf(os.name == "nt", "Linux profile file modes and symlinks")
     def test_profile_replaces_releng_users_and_preserves_boot_configuration(self):

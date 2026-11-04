@@ -104,15 +104,15 @@ file_permissions=(['/root']='0:0:700' ['/etc/sudoers.d/lynux-live']='0:0:440'
     kernel = "linux" if arch == "x86_64" else "linux-aarch64"
     put(rootfs / "etc/mkinitcpio.conf", 'MODULES=(loop squashfs overlay dm_mod dm_crypt)\nBINARIES=()\nFILES=()\nHOOKS=(base udev microcode modconf kms memdisk archiso archiso_loop_mnt lynux_ventoy block filesystems keyboard shutdown)\nCOMPRESSION="zstd"\n')
     # Explicit presets also normalize Arch Linux ARM's Image/initramfs naming for archiso.
-    put(rootfs / "etc/mkinitcpio.d" / f"{kernel}.preset", f'''ALL_config="/etc/mkinitcpio.conf"
-ALL_kver="/boot/{'vmlinuz-linux' if arch == 'x86_64' else 'Image'}"
-PRESETS=('default')
+    # ALARM's kernel package owns its preset, so stage the override elsewhere
+    # until customize_airootfs.sh runs after the package transaction.
+    preset = (rootfs / "usr/share/lynux/linux-aarch64.preset" if arch == "aarch64"
+              else rootfs / "etc/mkinitcpio.d/linux.preset")
+    preset_kernel = 'ALL_kver="/boot/vmlinuz-linux"\n' if arch == "x86_64" else ""
+    put(preset, f'''ALL_config="/etc/mkinitcpio.conf"
+{preset_kernel}PRESETS=('default')
 default_image="/boot/initramfs-{kernel}.img"
 ''')
-    if arch == "aarch64":
-        script = rootfs / "root/customize_airootfs.sh"
-        with script.open("a") as stream:
-            stream.write('\ncp /boot/Image /boot/vmlinuz-linux-aarch64\n')
     for path in (profile / "efiboot/loader/entries").glob("*.conf"):
         path.unlink()
     console = "ttyS0" if arch == "x86_64" else "ttyAMA0"

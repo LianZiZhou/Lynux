@@ -34,7 +34,18 @@ if command -v rime_deployer >/dev/null; then
 fi
 chown -R live:live /home/live
 cc -O2 -Wall -Wextra -Werror /usr/local/lib/lynux/ventoy-find.c -o /usr/bin/lynux-ventoy-find
+if [[ -f /usr/share/lynux/linux-aarch64.preset ]]; then
+    # Preserve the kernel package's exact ALL_kver, overriding only live output names.
+    test -s /etc/mkinitcpio.d/linux-aarch64.preset
+    printf '\n# Lynux Live ISO overrides\n' >> /etc/mkinitcpio.d/linux-aarch64.preset
+    cat /usr/share/lynux/linux-aarch64.preset >> /etc/mkinitcpio.d/linux-aarch64.preset
+    cp /boot/Image /boot/vmlinuz-linux-aarch64
+fi
 mkinitcpio -P
+if [[ -f /usr/share/lynux/linux-aarch64.preset ]]; then
+    test -s /boot/initramfs-linux-aarch64.img
+    rm -f /boot/initramfs-linux.img /boot/initramfs-linux-fallback.img
+fi
 pacman -Q > /usr/share/lynux/packages.txt
 node --version > /usr/share/lynux/node-version.txt
 python --version > /usr/share/lynux/python-version.txt

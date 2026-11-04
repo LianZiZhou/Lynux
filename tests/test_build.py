@@ -11,6 +11,25 @@ import build  # noqa: E402
 
 
 class BuildTests(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "Linux profile generation")
+    def test_arm_profile_does_not_preempt_the_kernel_owned_preset(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            template = root / "template"
+            (template / "airootfs").mkdir(parents=True)
+            lock = root / "lock"
+            lock.mkdir()
+            (lock / "manifest.json").write_text("{}")
+            executable = root / "mkarchiso"
+            executable.write_text("_make_bootmode_uefi.systemd-boot() {}")
+            with patch.object(build.shutil, "which", return_value=str(executable)):
+                build.prepare_profile("aarch64", "test", root / "profile", lock, template=template)
+            staged = root / "profile/airootfs"
+            self.assertFalse((staged / "etc/mkinitcpio.d/linux-aarch64.preset").exists())
+            preset = (staged / "usr/share/lynux/linux-aarch64.preset").read_text()
+            self.assertNotIn('ALL_kver', preset)
+            self.assertIn('/boot/initramfs-linux-aarch64.img', preset)
+
     @unittest.skipIf(os.name == "nt", "Linux profile file modes and symlinks")
     def test_profile_replaces_releng_users_and_preserves_boot_configuration(self):
         with tempfile.TemporaryDirectory() as directory:

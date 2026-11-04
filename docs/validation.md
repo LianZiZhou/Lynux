@@ -53,7 +53,7 @@ Windows + WSL2 x86_64；使用隔离 Arch 容器构建，在 QEMU 中验证。
 ISO SHA-256：`9251571949ca24d3857dd868e8441bd18bd0ed62b75bfcdadd35b760f8e1dd36`。
 逐项报告和截图保存在本地 `out/`；报告绑定最终 ISO/rootfs 摘要。
 
-尚未完成：ARM64 ISO 的实际构建和启动验收、具体 Armbian 板型实机验证、真实账号登录、四类输入法在所有目标应用中的逐项实操，以及目标发行版完整安装验收。S3/GitHub 正式发布已配置，但尚未成功发布。ARM64 软件包清单已完成仓库可用性检查，但这不等于 ARM64 镜像已通过构建。
+上述本地验收阶段尚未完成 ARM64 自动化启动验证和正式发布；这两项已在后续双架构 CI 中完成，见下方记录。具体 Armbian 板型实机验证、真实账号登录、四类输入法在所有目标应用中的逐项实操，以及目标发行版完整安装验收仍待人工完成。
 
 ### 2026-11-04 GitHub runner 复验
 
@@ -64,3 +64,16 @@ ISO SHA-256：`9251571949ca24d3857dd868e8441bd18bd0ed62b75bfcdadd35b760f8e1dd36`
 - 修正测试介质写入后，[Ventoy 单项复验](https://github.com/LianZiZhou/Lynux/actions/runs/41783213425)通过。使用 Ventoy 1.1.18、包含中文和空格的 ISO 路径；EFI 分区与官方原始镜像一致，来宾返回 `LYNUX_BOOT_OK`。
 
 这两轮使用同一个 ISO，仅重验测试工具与介质制作过程；不等于双架构正式发布已完成。
+
+### 2026-11-04 双架构正式发布
+
+[完整流水线](https://github.com/LianZiZhou/Lynux/actions/runs/41804923096)已通过，发布版本为 [2026.11.04.13.1](https://github.com/LianZiZhou/Lynux/releases/tag/v2026.11.04.13.1)。两种架构均完成签名、来宾 CLI 离线检查、模拟模型请求、UEFI 光驱／USB Secure Boot 启动、完整性负例以及 Ventoy 普通 UEFI 启动；x86_64 另完成 BIOS 光驱／USB 启动。
+
+| 架构 | 正式 ISO SHA-256 |
+|---|---|
+| x86_64 | `ceef499ffe920f48a62c36fc1919f836fdc3302f6440cd123cc83b092d837068` |
+| aarch64 | `6944c35ae798b51cd26baa294edb2b132ea88697f655fe0d5bbd363d4f9ecbda` |
+
+完整 ISO 已上传至 S3，并通过公开 HTTPS 下载摘要校验；[最新版本索引](https://lynux.lzz.moe/lynux/latest.json)已更新。发布使用长期证书，指纹见 `docs/keys/README.md`。
+
+ARM GitHub runner 使用 TCG 软件模拟，三个成功的完整启动用例各约 9 分钟；该时间不代表物理 ARM 设备的启动速度。上述结果限于记录的 QEMU 环境，不能替代前述实机和交互验收。

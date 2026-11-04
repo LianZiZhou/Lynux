@@ -9,12 +9,14 @@ import subprocess
 import sys
 
 
-def reverify(directory, checks="all", acceleration="auto"):
+def reverify(directory, checks="all", acceleration="auto", arch="x86_64"):
+    if arch not in ("x86_64", "aarch64"):
+        raise ValueError("Unsupported image architecture")
     if acceleration != "auto":
         os.environ["LYNUX_QEMU_ACCEL"] = acceleration
-    meta = json.loads((directory / "x86_64-build.json").read_text())
+    meta = json.loads((directory / f"{arch}-build.json").read_text())
     name = meta["iso"]
-    if Path(name).name != name or not name.endswith("-x86_64-signed.iso") or meta["arch"] != "x86_64":
+    if Path(name).name != name or not name.endswith(f"-{arch}-signed.iso") or meta["arch"] != arch:
         raise ValueError("Invalid ISO artifact name/architecture")
     iso = directory / name
     with iso.open("rb") as stream:
@@ -25,16 +27,17 @@ def reverify(directory, checks="all", acceleration="auto"):
         work.mkdir(parents=True, exist_ok=False)
         subprocess.run(["xorriso", "-osirrox", "on", "-indev", str(iso), "-extract",
                         "/EFI/Linux/lynux.efi", str(work / "lynux.efi")], check=True)
-        subprocess.run([sys.executable, "/src/tests/image_matrix.py", "--iso", str(iso), "--arch", "x86_64",
+        subprocess.run([sys.executable, "/src/tests/image_matrix.py", "--iso", str(iso), "--arch", arch,
                         "--cert", str(directory / "lynux.crt"), "--secure-work", str(work),
                         "--report-dir", str(directory)], check=True)
-    subprocess.run([sys.executable, "/src/tests/ventoy_boot.py", "--iso", str(iso), "--arch", "x86_64",
-                    "--report", str(directory / "x86_64-ventoy.json")], check=True)
+    subprocess.run([sys.executable, "/src/tests/ventoy_boot.py", "--iso", str(iso), "--arch", arch,
+                    "--report", str(directory / f"{arch}-ventoy.json")], check=True)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("directory", type=Path)
+    parser.add_argument("--arch", choices=("x86_64", "aarch64"), default="x86_64")
     parser.add_argument("--checks", choices=("all", "ventoy"), default="all")
     parser.add_argument("--acceleration", choices=("auto", "kvm", "tcg"), default="auto")
     reverify(**vars(parser.parse_args()))

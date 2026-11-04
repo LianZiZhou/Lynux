@@ -122,7 +122,8 @@ def stage(directory, metadata, target):
 
 def notes(version, commit, tools, urls, hashes):
     base = f"lynux-{version}"
-    lines = [f"Weekly Lynux build from commit `{commit[:12]}`.", "",
+    # No title here: GitHub already shows the release name as the page heading.
+    lines = [f"Built from commit `{commit[:12]}`.", "",
              "| Architecture | Boots on | Download | SHA-256 |", "|---|---|---|---|"]
     for arch, boots in BOOTS.items():
         name = f"{base}-{arch}.iso"

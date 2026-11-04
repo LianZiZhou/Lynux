@@ -107,6 +107,8 @@ class ReleaseTests(unittest.TestCase):
             iso = "lynux-2026.11.03.1-x86_64.iso"
             self.assertIn(f"[{iso}](https://download.example/{iso})", text)
             self.assertIn("Claude Code 1.0.0", text)
+            self.assertTrue(text.startswith("Built from commit `aaaaaaaaaaaa`."))
+            self.assertFalse(any(line.startswith(("# ", "## ")) for line in text.splitlines()))
             self.assertNotRegex(text, "[一-鿿]")
 
     def test_failed_model_request_blocks_release(self):

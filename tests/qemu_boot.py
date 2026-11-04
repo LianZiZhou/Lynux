@@ -39,7 +39,7 @@ def screenshot(sockpath, output):
 
 
 def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, extra_disk=None,
-         expect="LYNUX_BOOT_OK", report=None, secure=False):
+         expect="LYNUX_BOOT_OK", report=None, secure=False, abort_on=()):
     if mode == "bios" and arch != "x86_64":
         raise ValueError("BIOS is only supported on x86_64")
     if mode == "uefi" and (not firmware or not variables):
@@ -60,13 +60,14 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, ext
         cmd = [f"qemu-system-{'x86_64' if arch == 'x86_64' else 'aarch64'}", "-machine", machine,
                "-accel", accel, "-cpu", "host" if accel == "kvm" else ("max" if arch == "x86_64" else "cortex-a72"),
                "-m", "4096", "-smp", "2", "-display", "none", "-serial", f"file:{serial}", "-no-reboot",
-               "-device", "virtio-gpu-pci", "-device", "qemu-xhci", "-device", "usb-kbd",
+               "-device", "virtio-vga" if arch == "x86_64" else "virtio-gpu-pci",
+               "-device", "qemu-xhci", "-device", "usb-kbd",
                "-device", "usb-tablet", "-nic", "user,model=virtio-net-pci",
                "-fw_cfg", "name=opt/lynux-test,string=1",
                "-qmp", f"unix:{temp / 'qmp.sock'},server=on,wait=off"]
         if arch == "x86_64":
-            # An explicit virtio-gpu does not suppress QEMU's default VGA. A second phantom
-            # screen makes screenshots capture the wrong monitor and changes Plasma layout.
+            # Use one VGA-compatible virtio adapter for x86 firmware/GRUB and Plasma.
+            # Suppress the separate default VGA so it cannot create a phantom second screen.
             cmd += ["-vga", "none"]
         if mode == "uefi":
             shutil.copy2(variables, temp / "vars.fd")
@@ -88,6 +89,7 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, ext
         with (temp / "qemu.log").open("w") as errors:
             process = subprocess.Popen(cmd, stderr=errors, stdout=errors)
             success = False
+            failure_message = None
             try:
                 while time.monotonic() - started < timeout:
                     text = serial.read_text(errors="replace") if serial.exists() else ""
@@ -96,6 +98,9 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, ext
                         success = True
                         if expect == "LYNUX_BOOT_OK":
                             time.sleep(4)  # Allow the compositor to present the first painted welcome frame.
+                        break
+                    failure_message = next((message for message in abort_on if message in text), None)
+                    if failure_message:
                         break
                     if process.poll() is not None:
                         break
@@ -113,7 +118,8 @@ def boot(iso, arch, mode, media, firmware=None, variables=None, timeout=600, ext
         result = {"schema": 1, "arch": arch, "mode": mode, "media": media, "passed": success,
                   "iso_sha256": sha(iso), "expected_marker": expect,
                   "secure_boot": secure, "duration_seconds": round(time.monotonic() - started, 1),
-                  "acceleration": accel, "qemu_returncode": process.returncode}
+                  "acceleration": accel, "qemu_returncode": process.returncode,
+                  "failure_message": failure_message}
         if report:
             report.parent.mkdir(parents=True, exist_ok=True)
             report.write_text(json.dumps(result, indent=2) + "\n")

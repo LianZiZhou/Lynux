@@ -70,7 +70,8 @@ def ventoy(iso, arch, report):
                 subprocess.run(["umount", str(mount)], check=True)
             subprocess.run(["losetup", "-d", loop], check=True)
         code, variables = firmware(arch, secure=False)
-        result = boot(disk, arch, "uefi", "usb", code, variables, report=report)
+        result = boot(disk, arch, "uefi", "usb", code, variables, report=report,
+                      abort_on=("error: cannot load image.", "error: you need to load the kernel first."))
         result.update({"iso_sha256": sha(iso), "iso_path": "/" + relative_iso.as_posix(),
                        "ventoy_version": version, "ventoy_sha256": sha(archive)})
         report.write_text(json.dumps(result, indent=2) + "\n")

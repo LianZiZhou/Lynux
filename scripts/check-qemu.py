@@ -8,14 +8,15 @@ def check(arch):
     if arch not in ("x86_64", "aarch64"):
         raise ValueError("Unsupported QEMU architecture")
     machine = "q35" if arch == "x86_64" else "virt"
+    display = "virtio-vga" if arch == "x86_64" else "virtio-gpu-pci"
     command = [f"qemu-system-{arch}", "-machine", machine, "-accel", "tcg", "-cpu", "max",
                "-m", "128", "-display", "none", "-serial", "none", "-monitor", "none",
-               "-nodefaults", "-S", "-device", "virtio-gpu-pci"]
+               "-nodefaults", "-S", "-device", display]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
         output, _ = process.communicate(timeout=2)
         raise RuntimeError(f"QEMU device initialization exited {process.returncode}: {output}. "
-                           "Both qemu-hw-display-virtio-gpu and qemu-hw-display-virtio-gpu-pci are required.")
+                           "Install the base virtio GPU module and the native VGA/PCI frontend module.")
     except subprocess.TimeoutExpired:
         print(f"QEMU {arch} virtio GPU device initialization passed", flush=True)
     finally:

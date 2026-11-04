@@ -13,6 +13,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import seal  # noqa: E402
+import qemu_boot  # noqa: E402
 
 spec = importlib.util.spec_from_file_location("prefetch_packages", ROOT / "scripts/prefetch-packages.py")
 prefetch_packages = importlib.util.module_from_spec(spec)
@@ -23,6 +24,23 @@ qemu_spec.loader.exec_module(check_qemu)
 
 
 class CIRegressions(unittest.TestCase):
+    def test_ventoy_loader_error_fails_without_waiting_for_boot_timeout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            iso = Path(directory) / "test.iso"
+            iso.write_bytes(b"test")
+
+            def launch(cmd, **kwargs):
+                serial = Path(cmd[cmd.index("-serial") + 1].removeprefix("file:"))
+                serial.write_text("error: cannot load image.\n")
+                from unittest.mock import Mock
+                return Mock(returncode=-15)
+
+            with patch.object(qemu_boot.subprocess, "Popen", side_effect=launch), \
+                    patch.object(qemu_boot.time, "sleep") as sleep, patch("builtins.print"):
+                with self.assertRaisesRegex(RuntimeError, "did not produce"):
+                    qemu_boot.boot(iso, "x86_64", "bios", "usb", abort_on=("error: cannot load image.",))
+            sleep.assert_not_called()
+
     def test_device_preflight_rejects_emulator_crash_before_image_build(self):
         with patch.object(check_qemu.subprocess, "Popen") as launch:
             process = launch.return_value

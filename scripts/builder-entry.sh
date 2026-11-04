@@ -13,7 +13,7 @@ packages=(arch-install-scripts squashfs-tools dosfstools libisoburn mtools
   e2fsprogs parted exfatprogs grub python python-yaml python-docutils git make gnupg npm nodejs systemd-ukify sbsigntools cpio zstd
   qemu-hw-display-virtio-gpu qemu-hw-display-virtio-gpu-pci virt-firmware openssl)
 if [[ "$arch" == x86_64 ]]; then
-    packages+=(syslinux qemu-system-x86 edk2-ovmf)
+    packages+=(syslinux qemu-system-x86 edk2-ovmf qemu-hw-display-virtio-vga)
 else
     # ALARM does not ship edk2-ovmf/edk2-armvirt. ci-container.sh builds the
     # pinned, Secure Boot-enabled ArmVirt firmware after this setup completes.

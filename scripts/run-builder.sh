@@ -19,11 +19,9 @@ mkdir -p "$repo/out"
 case "$arch" in
   x86_64) image=archlinux:base-devel ;;
   aarch64)
-    # Official Arch Linux ARM rootfs; record its bytes rather than trusting a floating third-party image.
+    # Official Arch Linux ARM rootfs, checked against its upstream signature.
     mkdir -p "$repo/work/bootstrap"
-    python3 "$repo/scripts/download.py" \
-      "${ALARM_ROOTFS_URL:-https://mirrors.tuna.tsinghua.edu.cn/archlinuxarm/os/ArchLinuxARM-aarch64-latest.tar.gz}" \
-      "$repo/work/bootstrap/archlinuxarm.tar.gz" --fresh
+    bash "$repo/scripts/fetch-alarm-rootfs.sh" "$repo/work/bootstrap/archlinuxarm.tar.gz"
     sha256sum "$repo/work/bootstrap/archlinuxarm.tar.gz" > "$repo/work/bootstrap/SHA256SUMS"
     image=$(docker import "$repo/work/bootstrap/archlinuxarm.tar.gz") ;;
   *) echo 'Unsupported architecture' >&2; exit 2 ;;

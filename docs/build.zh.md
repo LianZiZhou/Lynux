@@ -23,7 +23,7 @@ archiso 的 `customize_airootfs.sh` 钩子已被上游标为 deprecated。我们
 
 超时：pacman 单个包 300 秒，签名 60 秒，其他单个文件 900 秒，批量下载 1200 秒。超时就构建失败，绝不接受没校验过的文件。
 
-x86_64 在 Arch 官方容器里构建。ARM64 从清华 TUNA 的 HTTPS 镜像下载 Arch Linux ARM rootfs 并记录 SHA-256，装进镜像的包照样由 pacman 校验签名。原来的 GeoIP 镜像域名在开发环境里 HTTPS 证书校验不过，所以换了一个能通过校验的镜像，而不是关掉 TLS。可以用 `ALARM_ROOTFS_URL` 改引导包地址。记下的 rootfs 哈希只说明下载到的是什么，不是上游签名。也可以直接在验证过的原生 Arch Linux ARM 机器上构建。
+x86_64 在 Arch 官方容器里构建。ARM64 只用 Arch Linux ARM 官方镜像：依次是佛罗里达、加利福尼亚、德国（`fl.us`、`ca.us` 和 `de3.mirror.archlinuxarm.org`）。GeoIP 主域名 `mirror.archlinuxarm.org` 的证书和域名对不上，所以跳过它，而不是关掉 TLS。`scripts/fetch-alarm-rootfs.sh` 下载 rootfs 后，会用 `config/keys/archlinuxarm-build.asc` 里固定的 Arch Linux ARM Build System 公钥（`68B3 537F 39A3 13B3 E574 D067 7719 3F15 2BDB E6A6`）校验上游签名，下载或签名失败就换下一个镜像。rootfs 的 SHA-256 也会记录下来。装进镜像的包照样由 pacman 校验签名，第一次下载软件包失败会最多重试三次。可以用 `ALARM_ROOTFS_URL` 改 rootfs 地址，但同一地址加 `.sig` 的签名必须有效。也可以直接在验证过的原生 Arch Linux ARM 机器上构建。
 
 ## 本地构建
 

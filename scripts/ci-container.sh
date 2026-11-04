@@ -6,9 +6,7 @@ repo=$(pwd)
 mkdir -p out "${RUNNER_TEMP:?}/lynux-keys"
 image=archlinux:base-devel
 if [[ "$arch" == aarch64 ]]; then
-    python3 scripts/download.py \
-      "${ALARM_ROOTFS_URL:-https://mirrors.tuna.tsinghua.edu.cn/archlinuxarm/os/ArchLinuxARM-aarch64-latest.tar.gz}" \
-      "$RUNNER_TEMP/archlinuxarm.tar.gz" --fresh
+    bash scripts/fetch-alarm-rootfs.sh "$RUNNER_TEMP/archlinuxarm.tar.gz"
     sha256sum "$RUNNER_TEMP/archlinuxarm.tar.gz" > out/aarch64-bootstrap-SHA256SUMS.txt
     image=$(docker import "$RUNNER_TEMP/archlinuxarm.tar.gz")
 fi

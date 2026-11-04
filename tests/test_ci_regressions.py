@@ -17,6 +17,17 @@ spec.loader.exec_module(prefetch_packages)
 
 
 class CIRegressions(unittest.TestCase):
+    def test_builder_prefetch_skips_an_already_installed_set(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(prefetch_packages.subprocess, "check_output", side_effect=[directory + "\n", ""]) as query, \
+                    patch.object(prefetch_packages.subprocess, "run") as refresh, \
+                    patch.object(prefetch_packages, "download_many") as downloads:
+                prefetch_packages.prefetch(Path(directory) / "pacman.conf", ["python"], installed=True)
+            self.assertIn("--needed", query.call_args.args[0])
+            self.assertNotIn("--dbpath", query.call_args.args[0])
+            refresh.assert_not_called()
+            downloads.assert_not_called()
+
     def test_prefetch_uses_profile_cache_instead_of_host_cache(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

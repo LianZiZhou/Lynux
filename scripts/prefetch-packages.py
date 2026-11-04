@@ -10,15 +10,21 @@ from urllib.parse import urlsplit, unquote
 from download import download_many
 
 
-def prefetch(config, packages):
+def prefetch(config, packages, installed=False):
     # mkarchiso derives pacstrap's cache from this profile, not /etc/pacman.conf.
     cache = Path(subprocess.check_output(["pacman-conf", "--config", str(config), "CacheDir"],
                                         text=True).splitlines()[0])
     cache.mkdir(parents=True, exist_ok=True)
     # Do not let installed host packages suppress target dependencies or pollute another architecture.
     with tempfile.TemporaryDirectory(prefix="lynux-pacman-db-") as directory:
-        cmd = ["pacman", "--config", str(config), "--dbpath", directory, "--noconfirm"]
-        subprocess.run([*cmd, "-Sy"], check=True)
+        cmd = ["pacman", "--config", str(config), "--noconfirm"]
+        if installed:
+            # Builder setup has already refreshed/upgraded the native system.
+            # Resolve only dependencies it still needs, retaining its real DB.
+            cmd += ["--needed"]
+        else:
+            cmd += ["--dbpath", directory]
+            subprocess.run([*cmd, "-Sy"], check=True)
         listing = subprocess.check_output([*cmd, "-Sp", "--print-format", "%h %l", *packages], text=True)
         jobs = []
         for line in listing.splitlines():
@@ -28,6 +34,8 @@ def prefetch(config, packages):
                 name = Path(unquote(urlsplit(url).path)).name
                 jobs.append((url, cache / name, "sha-256=" + checksum))
         if not jobs:
+            if installed and not listing.strip():
+                return
             raise ValueError("No validated package URLs returned by pacman")
         download_many(jobs)
 
@@ -36,6 +44,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--packages", type=Path, required=True)
+    parser.add_argument("--installed", action="store_true", help="Prefetch missing native builder dependencies only")
     args = parser.parse_args()
     prefetch(args.config, [line.strip() for line in args.packages.read_text().splitlines()
-                          if line.strip() and not line.startswith("#")])
+                          if line.strip() and not line.startswith("#")], installed=args.installed)

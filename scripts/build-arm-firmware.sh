@@ -13,7 +13,10 @@ if [[ -f "$cache/edk2.commit" ]] && [[ $(cat "$cache/edk2.commit") == "$commit" 
     echo "Restored verified ARM test firmware for EDK2 $commit"
     exit 0
 fi
-pacman -S --needed --noconfirm base-devel python git acpica nasm openssl
+packages=(base-devel python git acpica nasm openssl)
+printf '%s\n' "${packages[@]}" > /build/firmware-packages.txt
+python /src/scripts/prefetch-packages.py --config /etc/pacman.conf --packages /build/firmware-packages.txt --installed
+pacman -S --needed --noconfirm "${packages[@]}"
 git init /build/edk2
 git -C /build/edk2 fetch --depth 1 https://github.com/tianocore/edk2.git "$commit"
 git -C /build/edk2 checkout --detach FETCH_HEAD

@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 from urllib.parse import urlsplit
 
@@ -23,7 +24,8 @@ def options():
             "--max-tries=5", "--retry-wait=3", "--connect-timeout=20", "--timeout=60",
             "--lowest-speed-limit=16K", "--check-certificate=true", "--enable-rpc=false",
             "--follow-torrent=false", "--follow-metalink=false", "--summary-interval=10",
-            "--console-log-level=warn", "--download-result=hide"]
+            "--console-log-level=warn", "--download-result=hide",
+            "--enable-color=false", "--show-console-readout=false"]
 
 
 def validate(url, path, checksum=None):
@@ -67,7 +69,18 @@ def download(url, path, checksum=None, fresh=False):
            "--out", path.name]
     if checksum:
         cmd += [f"--checksum={checksum}", "--check-integrity=true"]
-    subprocess.run([*cmd, url], check=True)
+    command = [*cmd, url]
+    if urlsplit(url).path.endswith((".db.sig", ".files.sig")):
+        # Keep the failure status: pacman decides whether a database signature
+        # is optional. Do not print aria2's large ERROR block for an absent one.
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        if result.returncode == 3:
+            print(f"Repository database signature not published: {url}", file=sys.stderr)
+        elif result.stdout:
+            print(result.stdout, end="", file=sys.stderr)
+        result.check_returncode()
+    else:
+        subprocess.run(command, check=True)
     verify(path, checksum)
     return path
 

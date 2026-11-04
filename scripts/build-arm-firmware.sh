@@ -21,7 +21,7 @@ if ! grep -q '^\*_GCC_AARCH64_CC_PATH' BaseTools/Conf/tools_def.template; then t
 export GCC_AARCH64_PREFIX='' GCC5_AARCH64_PREFIX=''
 build -a AARCH64 -t "$toolchain" -p ArmVirtPkg/ArmVirtQemu.dsc -b RELEASE \
   -D SECURE_BOOT_ENABLE=TRUE -D FD_SIZE_IN_MB=3
-mkdir -p /build/firmware
+mkdir -p /build/firmware /usr/share/qemu/firmware
 python - "$toolchain" <<'PY'
 import json
 from pathlib import Path

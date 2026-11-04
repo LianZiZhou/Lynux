@@ -11,8 +11,14 @@ sed -i '/^CheckSpace/a CacheDir = /build/pacman-cache' /etc/pacman.conf
 pacman -Syu --noconfirm
 pacman -S --needed --noconfirm arch-install-scripts squashfs-tools dosfstools libisoburn mtools \
   e2fsprogs parted exfatprogs grub python python-yaml python-docutils git make gnupg npm nodejs systemd-ukify sbsigntools cpio zstd \
-  qemu-system-x86 qemu-system-aarch64 qemu-hw-display-virtio-gpu-pci edk2-ovmf edk2-armvirt virt-firmware openssl
-if [[ "$arch" == x86_64 ]]; then pacman -S --needed --noconfirm syslinux; fi
+  qemu-hw-display-virtio-gpu-pci virt-firmware openssl
+if [[ "$arch" == x86_64 ]]; then
+    pacman -S --needed --noconfirm syslinux qemu-system-x86 edk2-ovmf
+else
+    # ALARM does not ship edk2-ovmf/edk2-armvirt. ci-container.sh builds the
+    # pinned, Secure Boot-enabled ArmVirt firmware after this setup completes.
+    pacman -S --needed --noconfirm qemu-system-aarch64
+fi
 # ARM support varies in packaged archiso; pin one upstream commit in the shared resolver job.
 commit=$(cat "${LYNUX_LOCK_DIR:-/src/work/lock}/archiso.commit")
 [[ "$commit" =~ ^[a-f0-9]{40}$ ]] || exit 1

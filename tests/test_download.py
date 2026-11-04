@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -30,6 +31,35 @@ class DownloadTests(unittest.TestCase):
             with patch.object(download.subprocess, "run") as execute:
                 download.download("https://example.test/latest", path, fresh=True)
             self.assertIn("--continue=false", execute.call_args.args[0])
+
+    def test_missing_database_signature_keeps_failure_without_error_spam(self):
+        with tempfile.TemporaryDirectory() as folder:
+            result = subprocess.CompletedProcess([], 3, stdout="[ERROR] Resource not found\n")
+            with patch.object(download.subprocess, "run", return_value=result), patch("sys.stderr") as stderr:
+                with self.assertRaises(subprocess.CalledProcessError) as raised:
+                    download.download("https://example.test/core.db.sig", Path(folder) / "core.db.sig")
+            self.assertEqual(raised.exception.returncode, 3)
+            output = "".join(call.args[0] for call in stderr.write.call_args_list)
+            self.assertIn("signature not published", output)
+            self.assertNotIn("[ERROR]", output)
+
+    def test_database_signature_network_errors_remain_visible(self):
+        with tempfile.TemporaryDirectory() as folder:
+            result = subprocess.CompletedProcess([], 1, stdout="TLS failure\n")
+            with patch.object(download.subprocess, "run", return_value=result), patch("sys.stderr") as stderr:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    download.download("https://example.test/core.db.sig", Path(folder) / "core.db.sig")
+            output = "".join(call.args[0] for call in stderr.write.call_args_list)
+            self.assertIn("TLS failure", output)
+
+    def test_package_signature_failure_is_not_filtered(self):
+        with tempfile.TemporaryDirectory() as folder:
+            failure = subprocess.CalledProcessError(3, ["aria2c"])
+            with patch.object(download.subprocess, "run", side_effect=failure) as execute:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    download.download("https://example.test/pkg.pkg.tar.zst.sig", Path(folder) / "pkg.sig")
+            self.assertTrue(execute.call_args.kwargs["check"])
+            self.assertNotIn("stdout", execute.call_args.kwargs)
 
     def test_corrupt_transfer_is_not_accepted(self):
         with tempfile.TemporaryDirectory() as folder:
